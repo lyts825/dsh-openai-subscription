@@ -1,0 +1,9 @@
+node_modules/
+lib/
+.reference-dsh/
+.local/
+*.tgz
+*.tsbuildinfo
+.env
+.env.*
+!.env.example

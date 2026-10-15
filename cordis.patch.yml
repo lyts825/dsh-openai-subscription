@@ -1,0 +1,3 @@
+- insert:
+    - id: openai-subscription
+      name: dsh-openai-subscription

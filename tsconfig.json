@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "strict": true, "skipLibCheck": true, "jsx": "react-jsx",
+    "allowImportingTsExtensions": true, "declaration": true,
+    "emitDeclarationOnly": true, "outDir": "lib/types", "rootDir": "src",
+    "lib": ["ES2023", "DOM", "ESNext.Disposable"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

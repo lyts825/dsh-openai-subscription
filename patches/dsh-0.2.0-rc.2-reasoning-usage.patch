@@ -1,0 +1,66 @@
+diff --git a/packages/llm/llm-pi-ai/README.i18n.yaml b/packages/llm/llm-pi-ai/README.i18n.yaml
+index 1931111..c4ffb5a 100644
+--- a/packages/llm/llm-pi-ai/README.i18n.yaml
++++ b/packages/llm/llm-pi-ai/README.i18n.yaml
+@@ -81,8 +81,8 @@
+   en: 9b7d6b95ec2c4351
+   zh: 356ac01aef9e8bed
+ /deepseek-ai-dsh-llm-pi-ai/model-experience/provider-response/token-effect:
+-  en: f002b21d0f4c3df0
+-  zh: 388c8ed4676ed1af
++  en: efdf58a8d9d31b8f
++  zh: dfde646fcc023bab
+ /deepseek-ai-dsh-llm-pi-ai/model-experience/provider-response/kv-cache-effect:
+   en: b6bd570c0159ba08
+   zh: 7d2d91eea6a8d830
+diff --git a/packages/llm/llm-pi-ai/README.md b/packages/llm/llm-pi-ai/README.md
+index 0e8a801..eae1aad 100644
+--- a/packages/llm/llm-pi-ai/README.md
++++ b/packages/llm/llm-pi-ai/README.md
+@@ -201,7 +201,7 @@ pi-ai events become harness reasoning, text, tool-call, usage, and finish chunks
+ 
+ #### Token effect
+ 
+-Generated content affects later inputs only after the loop records it. pi-ai folds reasoning tokens into output usage when the provider does not report them separately, and preserves its exact `totalTokens` value unchanged.
++Generated content affects later inputs only after the loop records it. The adapter preserves pi-ai's exact output and total token counts and exposes its reasoning-token breakdown when available, including zero. Reasoning tokens are already part of output usage and are not added again.
+ 
+ #### KV Cache effect
+ 
+diff --git a/packages/llm/llm-pi-ai/README.zh.md b/packages/llm/llm-pi-ai/README.zh.md
+index 5126fe2..6ec9ad8 100644
+--- a/packages/llm/llm-pi-ai/README.zh.md
++++ b/packages/llm/llm-pi-ai/README.zh.md
+@@ -201,7 +201,7 @@ pi-ai 事件变成 harness 的推理、文本、工具调用、用量与 finish
+ 
+ #### Token 影响
+ 
+-生成内容只在 loop 记录后才影响后续输入。提供方未单独报告推理 token 时，pi-ai 会把推理 token 并入输出用量，并原样保留其精确 `totalTokens` 值。
++生成内容只在 loop 记录后才影响后续输入。适配器原样保留 pi-ai 的精确输出与总 token 数，并在提供推理 token 明细时传递该值，包括零。推理 token 已计入输出用量，不会再次累加。
+ 
+ #### KV Cache 影响
+ 
+diff --git a/packages/llm/llm-pi-ai/src/stream.ts b/packages/llm/llm-pi-ai/src/stream.ts
+index 30e9c79..db7b541 100644
+--- a/packages/llm/llm-pi-ai/src/stream.ts
++++ b/packages/llm/llm-pi-ai/src/stream.ts
+@@ -16,16 +16,17 @@ import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '
+ import { toPiReplayState } from './replay.ts'
+ 
+ /**
+- * Map pi-ai usage (reasoning folded into output by pi-ai).
++ * Map pi-ai usage; reasoning tokens remain a subset of output tokens.
+  * @param usage - cumulative usage from the terminal pi-ai event.
+- * @returns harness counts with pi-ai's exact total; cache fields appear only
+- *   when non-zero (pi-ai reports zeros, not absence).
++ * @returns harness counts with pi-ai's exact output and total; an available
++ *   reasoning count includes zero, while cache fields appear only when non-zero.
+  */
+ export function mapUsage(usage: PiUsage): TokenUsage {
+   return {
+     inputTokens: usage.input,
+     outputTokens: usage.output,
+     totalTokens: usage.totalTokens,
++    ...usage.reasoning === undefined ? {} : { reasoningTokens: usage.reasoning },
+     ...usage.cacheRead > 0 ? { cacheReadTokens: usage.cacheRead } : {},
+     ...usage.cacheWrite > 0 ? { cacheWriteTokens: usage.cacheWrite } : {},
+   }
