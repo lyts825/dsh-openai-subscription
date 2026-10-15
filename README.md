@@ -1,25 +1,22 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，并查看 5 小时、每周额度与使用官方额度重置卡。插件版本 `0.2.0`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，并查看 5 小时、每周额度与使用官方额度重置卡。插件版本 `0.2.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+
+这是预发布候选：本地与隔离 Host 验证已通过，真实账号、模型调用和重置卡消费仍待验收。完整验证边界见 [项目状态](PROJECT_STATUS.md)。
 
 ## 安装
 
-在本项目目录构建并打包：
+从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.2.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
+
+Web 用户在下载目录执行，然后重启相应 profile：
 
 ```powershell
-npm ci
-npm run build
-npm pack
-```
-
-用 DSH 的插件管理命令安装生成的包，然后重启相应 profile：
-
-```powershell
-dsh plugin --profile web add D:/27247/Desktop/dsh-local_pluying/dsh-openai-subscription-0.2.0.tgz --ignore-scripts
+$plugin = (Resolve-Path '.\dsh-openai-subscription-0.2.0-rc.1.tgz').Path
+dsh plugin --profile web add $plugin --ignore-scripts
 dsh web
 ```
 
-桌面用户请使用 [Desktop / NEXT 安装说明](desktop/README.zh.md)，Windows ZIP 可用 `npm run package:desktop` 生成，包含应用和 profile 校验安装脚本。官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。安装包只在本地生成，尚未发布到 npm；不要把此包名当作已发布的 npm 包安装。预览版 DSH 接口仍在变化，本版不保证其他版本兼容。
+安装包通过 GitHub Releases 提供，未发布到 npm；不要把此包名当作已发布的 npm 包安装。预览版 DSH 接口仍在变化，本版不保证其他版本兼容。
 
 包内已经包含构建产物，安装时无需运行依赖脚本。上述 `--ignore-scripts` 可避免 pnpm 11 的未批准构建脚本错误；随附 Codex 可执行文件由平台依赖包提供。若曾安装失败，DSH 可能保留依赖但未启用插件：在插件管理中启用本插件，或确认目标 profile 的 `package.json` 中 `dsh.profile.bundles` 包含 `dsh-openai-subscription`，然后重启。
 
@@ -65,9 +62,14 @@ Desktop、NEXT 和自定义 profile 的登录保存在实际 profile 目录下�
 ## 开发与验证
 
 ```powershell
+npm ci
 npm run typecheck
-npm run build
+npm pack
+# Windows 桌面 ZIP（包含构建、安装脚本和包哈希清单）：
+npm run package:desktop
 ```
+
+`npm pack` 的 prepack 会构建 Host、Client 和类型声明。版本与 Git 标签按 `MAJOR.MINOR.PATCH` 管理；尚待真实账号验收的版本使用 `-rc.N` 后缀及 GitHub Pre-release 标记。生成的安装包不进入源码 Git，随 Release 附件分发。
 
 本地模拟测试、运行环境与截图放在 Git 忽略的 `.local/` 中，不随 npm 包交付。当前验证结论与真实账号验证缺口见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
 

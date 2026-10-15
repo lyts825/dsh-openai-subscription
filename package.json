@@ -1,9 +1,12 @@
 {
   "name": "dsh-openai-subscription",
-  "version": "0.2.0",
+  "version": "0.2.0-rc.1",
   "description": "DSH ChatGPT subscription provider, usage windows and earned rate-limit resets",
   "type": "module",
   "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/lyts825/dsh-openai-subscription.git" },
+  "homepage": "https://github.com/lyts825/dsh-openai-subscription#readme",
+  "bugs": { "url": "https://github.com/lyts825/dsh-openai-subscription/issues" },
   "engines": { "node": ">=24.2" },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

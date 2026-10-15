@@ -4,17 +4,18 @@
 
 补丁修复 `llm-pi-ai` 丢失推理 token 明细的问题。OpenAI Responses 与 Chat Completions 的推理用量经 pi-ai 的 `usage.reasoning` 映射至 DSH 已有的 `reasoningTokens`，供轮次用量统计与界面显示。显式零值保留，未报告时不生成字段，输出 token 和总 token 不重复累加。补丁同时更新该包的英文、中文 README 和对应配对记录。
 
-在目标 DSH 源码目录确认版本与已有改动后，使用补丁的绝对路径执行：
+在目标 DSH 源码目录确认版本与已有改动后，使用补丁的实际绝对路径执行（替换下方示例路径）：
 
 ```powershell
 git rev-parse HEAD
 git status --short
-git apply --check D:/27247/Desktop/dsh-local_pluying/patches/dsh-0.2.0-rc.2-reasoning-usage.patch
-git apply D:/27247/Desktop/dsh-local_pluying/patches/dsh-0.2.0-rc.2-reasoning-usage.patch
+$patch = 'C:/path/to/dsh-openai-subscription/patches/dsh-0.2.0-rc.2-reasoning-usage.patch'
+git apply --check $patch
+git apply $patch
 git diff --check
 ```
 
-本地验证：4 项针对实际 `mapUsage` 源码的检查通过，覆盖有值、零值、缺失及输出/总量不重复计数；补丁可在基线文件上应用，`git diff --check` 通过。测试保存在本项目已忽略的 `.local/tests/core-usage.test.ts`，在项目目录运行 `node --test .local/tests/core-usage.test.ts`。补丁本身不包含测试材料。
+本地验证：4 项针对实际 `mapUsage` 源码的检查通过，覆盖有值、零值、缺失及输出/总量不重复计数；补丁可在基线文件上应用，`git diff --check` 通过。用于这次验证的脚本保存在本地忽略目录，不随仓库或补丁分发；本仓库克隆后不包含该测试入口。
 
 未运行上游完整构建、完整测试或真实模型调用。当前参考检出为稀疏检出，未安装上游工作区依赖；文档只核对了本次段落的中英对应、结构与配对哈希，未宣称通过完整 `doc-sync`。应用补丁后需按目标 DSH 源码的构建流程重新生成并使用本地运行产物；安装订阅插件不会自动修改已安装的 DSH 本体。
 

@@ -1,6 +1,6 @@
 # DSH Desktop / DSH NEXT 安装说明
 
-这是 `dsh-openai-subscription 0.2.0` 桌面插件包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。
+这是 `dsh-openai-subscription 0.2.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.2.0-rc.1)。
 
 ## 适配目标
 
@@ -53,4 +53,4 @@ NEXT 自定义 profile 追加 `-Profile your-profile`。`-ValidateOnly` 只检�
 
 插件继续复用 DSH 原生 Pi AI 适配器、工具、审批和会话回放。npm 包的 `patches/` 目录另含官方 `0.2.0-rc.2` GPT 推理 token 用量修复补丁；必须在对应源码应用并重建，安装插件不会修改现有应用。本体补丁不能仅凭 NEXT 内核版本相同就直接覆盖其已构建文件。
 
-本次先交付本地安装包，真实账号稍后验收。未完成真实订阅调用或重置卡消费，不代表已登录、已部署到用户 profile 或已发布到 npm。详细验证结论见 npm 包内 `PROJECT_STATUS.md`。
+本次以 GitHub Pre-release 交付安装包，真实账号稍后验收。未完成真实订阅调用或重置卡消费，不代表已登录、已部署到用户 profile 或已发布到 npm。完整官方桌面安装壳仍待验收；详细验证结论见 npm 包内 `PROJECT_STATUS.md`。
