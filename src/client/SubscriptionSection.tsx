@@ -28,10 +28,15 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
   const [uncertainId, setUncertainId] = useState(pendingReset.current)
   const [selectedCredit, setSelectedCredit] = useState('')
   const [confirmationId, setConfirmationId] = useState<string | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'copied' | 'manual'>('idle')
   const [now, setNow] = useState(Date.now)
   const mounted = useRef(false)
   const inFlight = useRef<AbortController | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
+  const confirmTrigger = useRef<HTMLButtonElement>(null)
+  const cancelConfirmation = useRef<HTMLButtonElement>(null)
+  const manualLink = useRef<HTMLInputElement>(null)
+  const copySequence = useRef(0)
   const root = useRef<HTMLDivElement>(null)
   const id = useId()
   const locale = getLocale()
@@ -116,12 +121,30 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
     if (!element) return
     if (confirmation) {
       setNow(Date.now())
-      if (!element.open) element.showModal()
+      if (!element.open) {
+        element.showModal()
+        cancelConfirmation.current?.focus({ preventScroll: true })
+      }
       const timer = window.setInterval(() => { setNow(Date.now()) }, 1000)
       return () => { window.clearInterval(timer) }
     }
-    if (element.open) element.close()
+    if (element.open) {
+      element.close()
+      const trigger = confirmTrigger.current
+      if (trigger?.isConnected && !trigger.disabled) trigger.focus({ preventScroll: true })
+    }
   }, [confirmation])
+
+  useEffect(() => {
+    copySequence.current++
+    setCopyStatus('idle')
+  }, [view?.login?.id, view?.login?.url])
+
+  useEffect(() => {
+    if (copyStatus !== 'manual') return
+    manualLink.current?.focus({ preventScroll: true })
+    manualLink.current?.select()
+  }, [copyStatus])
 
   const credits = view?.usage?.resetCredits
   useEffect(() => {
@@ -154,6 +177,19 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
   const error = failure ?? view?.error
   const waiting = uncertainId ?? (operation?.status === 'uncertain' ? operation.id : null)
   const loginUrl = view?.login ? trustedAuthorizationUrl(view.login.url) : null
+  const copyLoginLink = async () => {
+    if (!loginUrl || copyStatus === 'copying') return
+    const sequence = ++copySequence.current
+    setCopyStatus('copying')
+    try {
+      // Desktop shells and regular browsers both own Clipboard permission.
+      // Only this explicit user action writes; denial exposes a selectable URL.
+      await navigator.clipboard.writeText(loginUrl)
+      if (mounted.current && sequence === copySequence.current) setCopyStatus('copied')
+    } catch {
+      if (mounted.current && sequence === copySequence.current) setCopyStatus('manual')
+    }
+  }
   const hasWindows = Boolean(view?.usage?.buckets.some(bucket => bucket.windows.length > 0))
   const expiredConfirmation = Boolean(confirmation && (confirmation.expiresAt === null || confirmation.expiresAt <= now))
   const confirmedDate = confirmation?.expiresAt ? localDate(confirmation.expiresAt, locale) : null
@@ -196,8 +232,17 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
           <p>{loginUrl ? t('loginPending') : t('unsafeLoginUrl')}</p>
           <div className="oa-actions">
             {loginUrl && <a className="oa-link" href={loginUrl} target="_blank" rel="noopener noreferrer">{t('authorize')}</a>}
+            {loginUrl && <button type="button" disabled={copyStatus === 'copying'} onClick={() => { void copyLoginLink() }}>
+              {t(copyStatus === 'copying' ? 'copyingLink' : 'copyLoginLink')}
+            </button>}
             <button type="button" disabled={busy !== null} onClick={() => { void perform('cancelLogin') }}>{t('cancelLogin')}</button>
           </div>
+          {copyStatus === 'copied' && <p role="status">{t('linkCopied')}</p>}
+          {copyStatus === 'manual' && loginUrl && <label className="oa-field">
+            <span role="status">{t('copyLinkManually')}</span>
+            <input ref={manualLink} className="oa-copy-link" type="text" readOnly value={loginUrl}
+              aria-label={t('loginLink')} onFocus={event => { event.currentTarget.select() }} />
+          </label>}
         </div>}
       </section>
 
@@ -270,7 +315,7 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
               </ul>
             </> : <p className="oa-subtle">{t('autoCredit')} · {t('expiryUnknown')}</p>}
             <div className="oa-actions">
-              <button type="button" disabled={busy !== null || waiting !== null || stale || Boolean(view.error)} onClick={() => { void prepare() }}>
+              <button ref={confirmTrigger} type="button" disabled={busy !== null || waiting !== null || stale || Boolean(view.error)} onClick={() => { void prepare() }}>
                 {busy === 'prepareReset' ? t('prepare') : busy === 'consumeReset' ? t('consuming') : t('useCredit')}
               </button>
             </div>
@@ -292,7 +337,19 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
         </div>
       </div>}
 
-      <dialog ref={dialog} aria-labelledby={`${id}-confirm-title`} aria-describedby={`${id}-confirm-body`}
+      <dialog ref={dialog} role={confirmation ? 'dialog' : undefined} aria-modal={confirmation ? true : undefined}
+        data-shortcut-modal={confirmation ? 'openai-subscription-reset' : undefined}
+        aria-labelledby={`${id}-confirm-title`} aria-describedby={`${id}-confirm-body`}
+        onKeyDown={event => {
+          if (!confirmation || (event.key !== 'Escape' && event.key !== 'Tab')) return
+          // DSH settings also owns a document-level modal keyboard handler.
+          // Let the native dialog contain Tab, and keep Escape within this layer.
+          event.stopPropagation()
+          if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
+            || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
+          event.preventDefault()
+          if (!event.repeat) setConfirmationId(null)
+        }}
         onCancel={event => { event.preventDefault(); setConfirmationId(null) }}>
         {confirmation && <div className="oa-confirm">
           <h3 id={`${id}-confirm-title`}>{t('confirmTitle')}</h3>
@@ -300,7 +357,7 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
           <p>{t('confirmCard', { card: cardDescription(confirmation.creditId) })}</p>
           <p className="oa-subtle">{expiredConfirmation ? t('confirmExpired') : confirmedDate ? t('confirmExpires', { time: confirmedDate }) : t('prepared')}</p>
           <div className="oa-actions">
-            <button type="button" autoFocus onClick={() => { setConfirmationId(null) }}>{t('cancel')}</button>
+            <button ref={cancelConfirmation} type="button" onClick={() => { setConfirmationId(null) }}>{t('cancel')}</button>
             <button className="oa-primary" type="button" disabled={busy !== null || expiredConfirmation} onClick={consume}>{t('confirmUse')}</button>
           </div>
         </div>}

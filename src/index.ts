@@ -16,7 +16,7 @@ const MAX_RPC_BODY_BYTES = 16 * 1024
 /** Register the provider and its settings operations; disposing the plugin closes its child process. */
 export function apply(ctx: Context, input: Options): void {
   const config = Config(input)
-  const service = new SubscriptionService({ ...runtimePaths(config), pollIntervalMs: config.pollIntervalMs, requestTimeoutMs: config.requestTimeoutMs })
+  const service = new SubscriptionService({ ...runtimePaths(config, ctx), pollIntervalMs: config.pollIntervalMs, requestTimeoutMs: config.requestTimeoutMs })
   ctx.effect(() => () => service.dispose())
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER_ID], createSubscriptionAdapter(ctx, service, config)))
   ctx.inject(['connection'], child => {

@@ -43,12 +43,54 @@ export function bundledCodex(): string {
   return path
 }
 
-/** Resolve an independent login home; never use the user's existing Codex login cache. */
-export function runtimePaths(config: Options): { codexPath: string; codexHome: string } {
+/** Stable optional facts supplied by DSH's profile runner before plugins mount. */
+interface RuntimeContext {
+  get(name: string): unknown
+}
+
+interface ProfileLocation {
+  name: string
+  dir: string
+  home: string
+}
+
+function profileLocation(ctx?: RuntimeContext): ProfileLocation | undefined {
+  const value = ctx?.get('profileContext')
+  if (!value || typeof value !== 'object') return
+  const profile = value as Partial<ProfileLocation>
+  if (typeof profile.name !== 'string' || !profile.name
+    || typeof profile.dir !== 'string' || !isAbsolute(profile.dir)
+    || typeof profile.home !== 'string' || !isAbsolute(profile.home)) return
+  return { name: profile.name, dir: resolve(profile.dir), home: resolve(profile.home) }
+}
+
+function launchHome(ctx?: RuntimeContext): string {
+  const snapshot = ctx?.get('launchEnvironment') as { get?: (name: string) => { value?: unknown } | undefined } | undefined
+  const configured = typeof snapshot?.get === 'function' ? snapshot.get('DSH_HOME')?.value : process.env.DSH_HOME
+  if (typeof configured !== 'string' || !configured.trim()) return join(homedir(), '.dsh')
+  if (configured === '~') return homedir()
+  if (configured.startsWith('~/') || configured.startsWith('~\\')) return resolve(homedir(), configured.slice(2))
+  return resolve(configured)
+}
+
+function samePath(left: string, right: string): boolean {
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
+/** Resolve independent profile credentials; never move or reuse the user's Codex login cache. */
+export function runtimePaths(config: Options, ctx?: RuntimeContext): { codexPath: string; codexHome: string } {
   if (config.codexPath && !isAbsolute(config.codexPath)) throw new Error('codexPath must be an absolute executable path.')
   if (config.dataDirectory && !isAbsolute(config.dataDirectory)) throw new Error('dataDirectory must be an absolute path.')
+  const profile = profileLocation(ctx)
+  const home = profile?.home ?? launchHome(ctx)
+  // Keep 0.1's default web login. Desktop and custom profiles own their credentials,
+  // including an Electron profile called "web". Missing profile facts retain the old fallback.
+  const legacyWeb = profile?.name === 'web'
+    && samePath(profile.dir, resolve(profile.home, 'profiles', 'web'))
+    && !process.versions.electron
+  const root = profile && !legacyWeb ? profile.dir : home
   return {
     codexPath: config.codexPath || bundledCodex(),
-    codexHome: config.dataDirectory || resolve(process.env.DSH_HOME || join(homedir(), '.dsh'), 'openai-subscription'),
+    codexHome: config.dataDirectory || join(root, 'openai-subscription'),
   }
 }

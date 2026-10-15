@@ -1,6 +1,6 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，并查看 5 小时、每周额度与使用官方额度重置卡。插件版本 `0.1.0`，兼容基线为 DSH `0.2.0-rc.2`，需要 Node.js 24.2 或以上版本。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，并查看 5 小时、每周额度与使用官方额度重置卡。插件版本 `0.2.0`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
 
 ## 安装
 
@@ -15,11 +15,11 @@ npm pack
 用 DSH 的插件管理命令安装生成的包，然后重启相应 profile：
 
 ```powershell
-dsh plugin --profile web add D:/27247/Desktop/dsh-local_pluying/dsh-openai-subscription-0.1.0.tgz --ignore-scripts
+dsh plugin --profile web add D:/27247/Desktop/dsh-local_pluying/dsh-openai-subscription-0.2.0.tgz --ignore-scripts
 dsh web
 ```
 
-桌面版使用其随附的 DSH CLI 与 `desktop` profile。安装包只在本地生成，尚未发布到 npm；不要把此包名当作已发布的 npm 包安装。预览版 DSH 接口仍在变化，本版不保证其他版本兼容。
+桌面用户请使用 [Desktop / NEXT 安装说明](desktop/README.zh.md)，Windows ZIP 可用 `npm run package:desktop` 生成，包含应用和 profile 校验安装脚本。官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。安装包只在本地生成，尚未发布到 npm；不要把此包名当作已发布的 npm 包安装。预览版 DSH 接口仍在变化，本版不保证其他版本兼容。
 
 包内已经包含构建产物，安装时无需运行依赖脚本。上述 `--ignore-scripts` 可避免 pnpm 11 的未批准构建脚本错误；随附 Codex 可执行文件由平台依赖包提供。若曾安装失败，DSH 可能保留依赖但未启用插件：在插件管理中启用本插件，或确认目标 profile 的 `package.json` 中 `dsh.profile.bundles` 包含 `dsh-openai-subscription`，然后重启。
 
@@ -38,7 +38,9 @@ dsh web
 
 设置操作通过 DSH Connection 的精确 `/api/openai-subscription/*` 路由，沿用 Host/Origin 检查、浏览器认证和原生请求格式，与本体 Gateway 共存；插件请求体另限 16 KiB。
 
-登录保存在 `$DSH_HOME/openai-subscription`（未指定 `DSH_HOME` 时为 `~/.dsh/openai-subscription`）。这里的 `auth.json` 是 Codex 自身的文件凭据缓存，包含敏感登录信息，且不是额外加密的存储；插件不会读取用户原有的 `~/.codex` 登录。缓存内容只在 Host 内用于同一订阅账号的模型请求，不发送给浏览器或写入项目仓库。它的内部格式属于兼容性依赖，格式不符或账号标识不一致时拒绝调用。
+Desktop、NEXT 和自定义 profile 的登录保存在实际 profile 目录下的 `openai-subscription`；普通默认 Web profile 保留 `$DSH_HOME/openai-subscription`（未指定 Home 时为 `~/.dsh/openai-subscription`）。显式 `dataDirectory` 优先；不能取得可靠 profile 信息时沿用旧 Home 路径。不会迁移或自动复用其他 profile 的凭据。
+
+这里的 `auth.json` 是 Codex 自身的文件凭据缓存，包含敏感登录信息，且不是额外加密的存储；插件不会读取用户原有的 `~/.codex` 登录。缓存内容只在 Host 内用于同一订阅账号的模型请求，不发送给浏览器或写入项目仓库。它的内部格式属于兼容性依赖，格式不符或账号标识不一致时拒绝调用。
 
 插件随附固定版本 `@openai/codex@0.162.1`。以下配置可合并到目标 profile 的 `cordis.patch.yml`；保留用户已有条目：
 

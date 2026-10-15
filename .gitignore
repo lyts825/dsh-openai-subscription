@@ -3,6 +3,7 @@ lib/
 .reference-dsh/
 .local/
 *.tgz
+/dsh-openai-subscription-desktop-*.zip
 *.tsbuildinfo
 .env
 .env.*

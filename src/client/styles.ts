@@ -32,6 +32,7 @@ export const styles = `
 .dsh-openai-subscription .oa-bucket { display:flex; flex-direction:column; gap:10px; }
 .dsh-openai-subscription .oa-field { display:flex; flex-direction:column; gap:6px; }
 .dsh-openai-subscription select { width:100%; max-width:100%; background:var(--dsw-alias-bg-layer-2, Canvas); }
+.dsh-openai-subscription .oa-copy-link { box-sizing:border-box; width:100%; min-width:0; border:1px solid var(--dsw-alias-border-l2, #d5d8df); border-radius:7px; padding:8px 10px; color:inherit; background:var(--dsw-alias-bg-layer-2, Canvas); font:inherit; }
 .dsh-openai-subscription .oa-credit-list { margin:0; padding-left:20px; }
 .dsh-openai-subscription .oa-credit-list li { margin:5px 0; }
 .dsh-openai-subscription .oa-credit-list span { margin-left:8px; }
