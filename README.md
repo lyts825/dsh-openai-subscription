@@ -1,17 +1,17 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，并查看 5 小时、每周额度与使用官方额度重置卡。插件版本 `0.2.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.3.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
 
 这是预发布候选：本地与隔离 Host 验证已通过，真实账号、模型调用和重置卡消费仍待验收。完整验证边界见 [项目状态](PROJECT_STATUS.md)。
 
 ## 安装
 
-从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.2.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
+从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
 
 Web 用户在下载目录执行，然后重启相应 profile：
 
 ```powershell
-$plugin = (Resolve-Path '.\dsh-openai-subscription-0.2.0-rc.1.tgz').Path
+$plugin = (Resolve-Path '.\dsh-openai-subscription-0.3.0-rc.1.tgz').Path
 dsh plugin --profile web add $plugin --ignore-scripts
 dsh web
 ```
@@ -28,6 +28,23 @@ dsh web
 4. 选择可用重置卡后先查看确认内容，确认才会调用重置接口。服务决定哪些窗口符合重置条件。超时或连接中断时显示结果待确认，只能用原操作 ID 重试；不会自动改用另一张卡。
 
 额度默认每 60 秒读取，在模型请求结束、服务额度通知和手动刷新时也会更新。通知可能只包含部分字段，因此通知触发完整读取。读取失败保留旧值并标记过期，不把未知额度显示为零或无限量。重置卡数量未知与确认为零分别显示。
+
+## DS / GPT 子代理分配
+
+在 **设置 → 子代理分配** 启用此功能，选择模式和具体模型后保存，再新建对话。模型候选来自当前 DSH 已配置的提供方；先在 DSH 完成所需的 DS / GPT 账号或 API 配置。GPT 可以选本插件的订阅路由，也可以选 DSH 中已有的 GPT 路由。模型出现在目录中不代表已登录、有余额或已取得调用权限。
+
+| 模式 | 设置 | 运行方式 |
+| --- | --- | --- |
+| 自动分配 | 分别选择一个 DS、一个 GPT 的提供方与模型 | 主代理根据任务调用 `delegate_to_deepseek` 或 `delegate_to_gpt` |
+| 手动指定 | 选择 DS 或 GPT，再指定该类的提供方与模型 | 只开放指定的子代理工具；执行时拒绝覆盖模型 |
+
+例如用 GPT 作为主模型，自动模式可让它把检索整理任务分配给 DS、把其他任务分配给 GPT；手动选 DS 后，新建子代理固定使用指定的 DS 模型。“自动”指主模型决定分工，不按额度或价格自动切换。所选模型不可用时返回错误，不静默回退。
+
+功能默认关闭。保存后的设置对新对话生效；对话创建时保存一份分配设置，恢复对话或热加载插件后继续使用这份设置，已有子代理保持创建时的模型。启用插件前的旧对话保持原行为。设置适用于新对话，无论主模型是 DS 还是 GPT；子代理继承同一分配设置和 DSH 的深度限制。
+
+子任务使用 DSH 原生 `spawn` 子会话与可继续的后台任务，沿用权限、审批、任务结果收集和取消。启用分配的对话会禁用本体其他新建子代理入口（包括原 `subagent*`、workflow、Ralph 和 Agent Team 的 `spawn_teammate`），避免绕过手动指定；已有子代理的查看、发消息和中断操作仍可用。安装其他第三方创建子会话的工具不在本版路由保证范围内。
+
+分配默认设置保存在当前插件数据目录的 `dsh-delegation-settings.json`，会话快照保存在 DSH 原生存储域。设置页并发保存发生冲突时需刷新后重新保存；损坏的配置不会被静默覆盖。分配文件只存提供方及模型 ID，不复制 DS 或 GPT 凭据。
 
 ## 账号与配置
 

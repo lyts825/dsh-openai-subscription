@@ -1,6 +1,6 @@
 # DSH Desktop / DSH NEXT 安装说明
 
-这是 `dsh-openai-subscription 0.2.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.2.0-rc.1)。
+这是 `dsh-openai-subscription 0.3.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1)。
 
 ## 适配目标
 
@@ -37,6 +37,7 @@ NEXT 自定义 profile 追加 `-Profile your-profile`。`-ValidateOnly` 只检�
 
 4. 重开应用，在 **设置 → OpenAI 订阅** 登录。授权链接使用系统浏览器；如无法自动打开，可点击复制登录链接。登录完成后回到应用刷新。
 5. 模型选择器中选择 **OpenAI（ChatGPT 订阅）**。目录由固定版本适配器提供，实际模型权限取决于账号。
+6. 如需跨模型子代理，打开 **设置 → 子代理分配**：自动模式分别选择 DS / GPT 模型，由主代理决定每次分工；手动模式选择 DS 或 GPT 并固定具体模型。保存后新建对话。默认关闭，旧对话保留原设置；模型不可用时不会自动切换。
 
 ## 桌面行为与数据
 
@@ -46,6 +47,7 @@ NEXT 自定义 profile 追加 `-Profile your-profile`。`-ValidateOnly` 只检�
 - 同一 Home、同一 profile 在两个应用间共享时会使用同一个账号目录；不要同时运行这两个 Host，生命周期锁会阻止并发使用。需要独立账号时选择独立 Home/profile。
 - 仅显示服务返回的 300 分钟 / 10080 分钟额度窗口；没有 5 小时限制时不显示 5 小时条目。读取失败显示过期状态，保留上次数据。
 - 使用重置卡必须先查看并确认。超时后只重试原操作 ID；不会自动消费其他卡。确认窗口支持 Esc、Tab 和关闭后的焦点恢复。
+- DS / GPT 子代理复用本体子会话、权限、审批和取消。启用分配的对话只开放选定路由的子代理创建工具，原 `subagent*`、workflow、Ralph 和 Agent Team 新建入口会被禁用；已有子代理控制不受影响。使用前需在当前 DSH 配置对应提供方。
 
 登录缓存 `auth.json` 包含敏感凭据，由 Codex 写入本地文件，未额外加密。备份和分享时不要包含账号目录。
 

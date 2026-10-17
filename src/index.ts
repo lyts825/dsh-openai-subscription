@@ -3,6 +3,8 @@ import { clientRequestSchema, type ConnectionRpcHandlerResult } from '@deepseek-
 import { Config, runtimePaths, type Options } from './config.ts'
 import { SubscriptionService } from './subscription.ts'
 import { createSubscriptionAdapter } from './provider.ts'
+import { DelegationSettings, DelegationSettingsError } from './delegation-settings.ts'
+import { installDelegationRuntime } from './delegation-runtime.ts'
 import { RPC_CHANNEL, RPC_PREFIX, PROVIDER_ID } from './shared.ts'
 
 export { Config } from './config.ts'
@@ -10,24 +12,43 @@ export const name = 'openai-subscription'
 export const inject = ['llm']
 
 /** Only these human-facing actions are available through DSH's authenticated Connection. */
-const actions = new Set(['state', 'refresh', 'login', 'cancelLogin', 'logout', 'prepareReset', 'consumeReset'])
+const actions = new Set(['state', 'refresh', 'login', 'cancelLogin', 'logout', 'prepareReset', 'consumeReset', 'delegationState', 'saveDelegation'])
 const MAX_RPC_BODY_BYTES = 16 * 1024
 
 /** Register the provider and its settings operations; disposing the plugin closes its child process. */
-export function apply(ctx: Context, input: Options): void {
+export async function apply(ctx: Context, input: Options): Promise<void> {
   const config = Config(input)
-  const service = new SubscriptionService({ ...runtimePaths(config, ctx), pollIntervalMs: config.pollIntervalMs, requestTimeoutMs: config.requestTimeoutMs })
+  const paths = runtimePaths(config, ctx)
+  const service = new SubscriptionService({ ...paths, pollIntervalMs: config.pollIntervalMs, requestTimeoutMs: config.requestTimeoutMs })
   ctx.effect(() => () => service.dispose())
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER_ID], createSubscriptionAdapter(ctx, service, config)))
+  const delegation = new DelegationSettings(ctx, paths.codexHome)
+  ctx.effect(() => () => delegation.dispose())
+  await delegation.initialize()
+  await installDelegationRuntime(ctx, () => delegation.current())
   ctx.inject(['connection'], child => {
     const handle = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<ConnectionRpcHandlerResult> => {
       const action = endpoint.slice(RPC_PREFIX.length)
       if (!endpoint.startsWith(RPC_PREFIX) || !actions.has(action)) return { ok: false, error: { code: 'subscription/unknown-action', message: 'Unknown subscription action.', details: {} } }
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return badRequest()
       const data = payload as Record<string, unknown>
-      const expected = action === 'prepareReset' ? ['creditId'] : action === 'consumeReset' ? ['operationId'] : []
+      const expected = action === 'prepareReset' ? ['creditId'] : action === 'consumeReset' ? ['operationId']
+        : action === 'saveDelegation' ? ['revision', 'policy'] : []
       if (Object.keys(data).length !== expected.length || Object.keys(data).some(key => !expected.includes(key))) return badRequest()
       if (signal.aborted) return { ok: false, error: { code: 'gateway/cancelled', message: 'Request cancelled.', details: {} } }
+      if (action === 'delegationState' || action === 'saveDelegation') {
+        try {
+          if (action === 'delegationState') return { ok: true, value: await delegation.state(signal) }
+          if (!Number.isSafeInteger(data.revision) || (data.revision as number) < 0) return badRequest()
+          return { ok: true, value: await delegation.save(data.revision as number, data.policy, signal) }
+        } catch (error) {
+          return { ok: false, error: {
+            code: error instanceof DelegationSettingsError ? `delegation/${error.code}` : 'delegation/failed',
+            message: error instanceof DelegationSettingsError ? error.message : '子代理设置操作失败，请刷新后重试。 / Delegation settings operation failed; refresh and retry.',
+            details: {},
+          } }
+        }
+      }
       try {
         switch (action) {
           case 'state': return { ok: true, value: service.snapshot() }

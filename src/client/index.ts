@@ -6,6 +6,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { RPC_CHANNEL, RPC_PREFIX, type SubscriptionView } from '../shared.ts'
 import { SubscriptionSection, type SubscriptionInjected } from './SubscriptionSection.tsx'
 import { en, zh } from './locales.ts'
+import type { DelegationView } from '../delegation-shared.ts'
+import { DelegationSection, type DelegationInjected } from './DelegationSection.tsx'
+import { en as delegationEn, zh as delegationZh } from './delegation-locales.ts'
 
 export const inject = ['connection', 'slots', 'locale']
 
@@ -34,4 +37,24 @@ export function apply(ctx: Context): void {
     locale: 'openai-subscription',
     inject: () => injected,
   }, SubscriptionSection))
+
+  const delegationT = ctx.locale.bind('openai-subscription-delegation')
+  ctx.effect(() => ctx.locale.register('openai-subscription-delegation', { en: delegationEn, zh: delegationZh }), 'openai-subscription: delegation dictionaries')
+  const delegationRequest = async (action: 'delegationState' | 'saveDelegation', payload: Record<string, unknown>, signal: AbortSignal): Promise<DelegationView> => {
+    const result = await connection.rpc.call(RPC_CHANNEL, RPC_PREFIX + action, payload, signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value as DelegationView
+  }
+  const delegation: DelegationInjected = {
+    load: signal => delegationRequest('delegationState', {}, signal),
+    save: (revision, policy, signal) => delegationRequest('saveDelegation', { revision, policy }, signal),
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'openai-subscription-delegation',
+    order: 21,
+    label: () => delegationT('nav'),
+    locale: 'openai-subscription-delegation',
+    inject: () => delegation,
+  }, DelegationSection))
 }
