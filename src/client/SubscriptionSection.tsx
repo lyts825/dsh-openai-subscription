@@ -4,6 +4,8 @@ import type { ResetCredit, ResetOperation, SubscriptionView } from '../shared.ts
 import type { SubscriptionLocaleKey } from './locales.ts'
 import { localDate, percentLabel, trustedAuthorizationUrl } from './format.ts'
 import { styles } from './styles.ts'
+import { ModelCatalogCard } from './ModelCatalogCard.tsx'
+import type { ModelCatalogView } from '../model-catalog-types.ts'
 
 export type SubscriptionAction = 'state' | 'refresh' | 'login' | 'cancelLogin' | 'logout' | 'prepareReset' | 'consumeReset'
 
@@ -12,6 +14,8 @@ export interface SubscriptionInjected {
   getLocale: () => string
   /** Transport failures must not unlock a new-card operation on a remount. */
   pendingReset: { current: string | null }
+  loadModels?: (signal: AbortSignal) => Promise<ModelCatalogView>
+  refreshModels?: (signal: AbortSignal) => Promise<ModelCatalogView>
 }
 
 export type SubscriptionSectionProps = PropsRuntime<'settings.section'>
@@ -21,7 +25,7 @@ const outcomeKeys: Record<NonNullable<ResetOperation['outcome']>, SubscriptionLo
   reset: 'resetDone', alreadyRedeemed: 'alreadyRedeemed', nothingToReset: 'nothingToReset', noCredit: 'noCredit',
 }
 
-export function SubscriptionSection({ t, request, getLocale, pendingReset }: SubscriptionSectionProps) {
+export function SubscriptionSection({ t, request, getLocale, pendingReset, loadModels, refreshModels }: SubscriptionSectionProps) {
   const [view, setView] = useState<SubscriptionView | null>(null)
   const [busy, setBusy] = useState<SubscriptionAction | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
@@ -256,6 +260,8 @@ export function SubscriptionSection({ t, request, getLocale, pendingReset }: Sub
           <button type="button" disabled={busy !== null} onClick={() => { void perform('refresh') }}>{t('refresh')}</button>
         </div>}
       </div>}
+
+      {loadModels && refreshModels && <ModelCatalogCard load={loadModels} refresh={refreshModels} getLocale={getLocale} />}
 
       {view?.account && <>
         <section className="oa-card" aria-labelledby={`${id}-quotas`} aria-busy={busy === 'refresh'}>

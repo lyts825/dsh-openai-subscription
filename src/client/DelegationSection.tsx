@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DelegationPolicy, DelegationRoute, DelegationTarget, DelegationView } from '../delegation-shared.ts'
+import type { DelegationCandidate, DelegationPolicy, DelegationRoute, DelegationTarget, DelegationView } from '../delegation-shared.ts'
 import type { DelegationLocaleKey } from './delegation-locales.ts'
 import { delegationStyles } from './delegation-styles.ts'
 
 export interface DelegationInjected {
   load: (signal: AbortSignal) => Promise<DelegationView>
+  refresh?: (signal?: AbortSignal) => Promise<DelegationView>
+  subscribeCatalog?: (listener: () => void) => () => void
   save: (revision: number, policy: DelegationPolicy, signal: AbortSignal) => Promise<DelegationView>
 }
 
@@ -27,13 +29,17 @@ const copyPolicy = (policy: DelegationPolicy): DelegationPolicy => ({
 })
 
 /** A staged editor. The Host owns routing, validation and policy persistence. */
-export function DelegationSection({ t, load, save }: DelegationSectionProps) {
+export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeCatalog, save }: DelegationSectionProps) {
   const [editor, setEditor] = useState<Editor | null>(null)
   const [busy, setBusy] = useState<'load' | 'save' | null>(null)
   const [failure, setFailure] = useState<{ key: DelegationLocaleKey; details: string } | null>(null)
   const [saved, setSaved] = useState(false)
+  const [search, setSearch] = useState<Record<DelegationTarget, string>>({ ds: '', gpt: '' })
+  const [catalogInvalidation, setCatalogInvalidation] = useState(0)
   const mounted = useRef(false)
   const active = useRef<AbortController | null>(null)
+  const pendingCatalogRead = useRef(false)
+  const searchInputs = useRef<Partial<Record<DelegationTarget, HTMLInputElement | null>>>({})
   const id = useId()
 
   const accept = useCallback((view: DelegationView) => {
@@ -47,14 +53,14 @@ export function DelegationSection({ t, load, save }: DelegationSectionProps) {
     })
   }, [])
 
-  const refresh = useCallback(async () => {
+  const readView = useCallback(async (request: DelegationInjected['load']) => {
     if (!mounted.current || active.current) return
     const controller = new AbortController()
     active.current = controller
     setBusy('load')
     setSaved(false)
     try {
-      const view = await load(controller.signal)
+      const view = await request(controller.signal)
       if (!mounted.current || controller.signal.aborted) return
       accept(view)
       setFailure(null)
@@ -65,17 +71,32 @@ export function DelegationSection({ t, load, save }: DelegationSectionProps) {
       if (active.current === controller) active.current = null
       if (mounted.current && !controller.signal.aborted) setBusy(null)
     }
-  }, [accept, load])
+  }, [accept])
 
   useEffect(() => {
     mounted.current = true
-    void refresh()
+    void readView(load)
     return () => {
       mounted.current = false
       active.current?.abort()
       active.current = null
+      pendingCatalogRead.current = false
     }
-  }, [refresh])
+  }, [load, readView])
+
+  useEffect(() => subscribeCatalog?.(() => {
+    if (!mounted.current || pendingCatalogRead.current) return
+    // Native directory events are reads, never force-sync requests. Multiple
+    // events during a load/save coalesce until that operation has settled.
+    pendingCatalogRead.current = true
+    setCatalogInvalidation(current => current + 1)
+  }), [subscribeCatalog])
+
+  useEffect(() => {
+    if (!mounted.current || active.current || !pendingCatalogRead.current) return
+    pendingCatalogRead.current = false
+    void readView(load)
+  }, [busy, catalogInvalidation, load, readView])
 
   const view = editor?.view
   const draft = editor?.draft
@@ -132,11 +153,49 @@ export function DelegationSection({ t, load, save }: DelegationSectionProps) {
     const candidates = view.candidates.filter(candidate => candidate.target === target)
       .filter((candidate, index, all) => all.findIndex(item => routeKey(item) === routeKey(candidate)) === index)
     const selected = draft[target]
-    const unavailable = selected !== null && !candidates.some(candidate => routeKey(candidate) === routeKey(selected))
+    const selectedCandidate = candidates.find(candidate => routeKey(candidate) === routeKey(selected))
+    const unavailable = selected !== null && !selectedCandidate
+    const terms = search[target].trim().normalize('NFKC').toLowerCase().split(/\s+/).filter(Boolean)
+    const matches = candidates.filter(candidate => {
+      const searchable = `${candidate.modelName} ${candidate.model} ${candidate.providerName} ${candidate.provider}`.normalize('NFKC').toLowerCase()
+      return terms.every(term => searchable.includes(term))
+    })
+    const selectedFiltered = selectedCandidate && !matches.includes(selectedCandidate)
+    const groups = new Map<string, { label: string; models: DelegationCandidate[] }>()
+    // Keep the provider's catalog order (which can carry its recommended model)
+    // while making identical model names from different providers unambiguous.
+    for (const candidate of matches) {
+      let group = groups.get(candidate.provider)
+      if (!group) {
+        group = { label: candidate.providerName === candidate.provider ? candidate.provider : `${candidate.providerName} (${candidate.provider})`, models: [] }
+        groups.set(candidate.provider, group)
+      }
+      group.models.push(candidate)
+    }
+    const modelLabel = (candidate: DelegationCandidate) => candidate.modelName === candidate.model
+      ? candidate.model : `${candidate.modelName} (${candidate.model})`
     const unused = draft.mode === 'manual' && draft.manualTarget !== target
     const selectId = `${id}-${target}`
     return <div className="oa-delegate-field">
       <label htmlFor={selectId}>{t(target === 'ds' ? 'deepseekModel' : 'gptModel')}</label>
+      <label htmlFor={`${selectId}-search`} className="oa-delegate-muted oa-delegate-search-label">
+        {t(target === 'ds' ? 'searchDeepseek' : 'searchGpt')}
+      </label>
+      <div className="oa-delegate-search">
+        <input id={`${selectId}-search`} type="search" value={search[target]} autoComplete="off"
+          ref={element => { searchInputs.current[target] = element }}
+          placeholder={t('searchPlaceholder')} aria-controls={selectId} aria-describedby={`${selectId}-matches`}
+          onChange={event => { setSearch(current => ({ ...current, [target]: event.target.value })) }} />
+        {search[target] && <button type="button" aria-label={t(target === 'ds' ? 'clearDeepseekSearch' : 'clearGptSearch')}
+          onClick={() => {
+            setSearch(current => ({ ...current, [target]: '' }))
+            searchInputs.current[target]?.focus()
+          }}>{t('clearSearch')}</button>}
+      </div>
+      <p id={`${selectId}-matches`} className="oa-delegate-muted oa-delegate-route" role="status" aria-live="polite">
+        {t('matchingModels')}: {matches.length} / {candidates.length}
+        {terms.length > 0 && matches.length === 0 ? ` · ${t('noMatches')}` : ''}
+      </p>
       <select id={selectId} value={routeKey(selected)}
         disabled={locked || !draft.enabled || !view.available || unused}
         aria-describedby={`${selectId}-help`} aria-invalid={draft.enabled && !unused && !routeAvailable(target)}
@@ -148,12 +207,19 @@ export function DelegationSection({ t, load, save }: DelegationSectionProps) {
         {unavailable && <option value={routeKey(selected)} disabled>
           {t('unavailable')} · {selected.provider}/{selected.model}
         </option>}
-        {candidates.map(candidate => <option key={routeKey(candidate)} value={routeKey(candidate)}>
-          {candidate.modelName} · {candidate.providerName} ({candidate.provider}/{candidate.model})
-        </option>)}
+        {selectedFiltered && <optgroup label={t('currentSelection')}>
+          <option value={routeKey(selectedCandidate)}>{modelLabel(selectedCandidate)} · {selectedCandidate.providerName}</option>
+        </optgroup>}
+        {[...groups].map(([provider, group]) => <optgroup key={provider} label={group.label}>
+          {group.models.map(candidate => <option key={routeKey(candidate)} value={routeKey(candidate)}>
+            {modelLabel(candidate)}
+          </option>)}
+        </optgroup>)}
       </select>
       <div id={`${selectId}-help`} className="oa-delegate-muted oa-delegate-route">
         {selected && <p>{selected.provider}/{selected.model}</p>}
+        {unavailable && <p className="oa-delegate-invalid">{t('unavailableHint')}</p>}
+        {selectedFiltered && <p>{t('selectedFiltered')}</p>}
         {unused ? <p>{t('optionalModel')}</p> : candidates.length === 0 ? <p>{t('noModels')}</p> : null}
       </div>
     </div>
@@ -166,7 +232,7 @@ export function DelegationSection({ t, load, save }: DelegationSectionProps) {
       <p className="oa-delegate-muted">{t('intro')}</p>
     </div>
     <div className="oa-delegate-actions">
-      <button type="button" disabled={busy !== null} onClick={() => { void refresh() }}>
+      <button type="button" disabled={busy !== null} onClick={() => { void readView(refreshCatalog ?? load) }}>
         {t(busy === 'load' ? 'refreshing' : 'refresh')}
       </button>
     </div>

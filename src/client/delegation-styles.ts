@@ -14,8 +14,13 @@ export const delegationStyles = `
 .dsh-openai-delegation legend { padding:0; margin-bottom:8px; font-weight:600; }
 .dsh-openai-delegation .oa-delegate-choices { display:flex; gap:22px; flex-wrap:wrap; margin-bottom:8px; }
 .dsh-openai-delegation .oa-delegate-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:16px; }
-.dsh-openai-delegation button, .dsh-openai-delegation select { box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--dsw-alias-border-l2, #d5d8df); border-radius:7px; padding:7px 12px; background:transparent; }
+.dsh-openai-delegation button, .dsh-openai-delegation select, .dsh-openai-delegation input[type=search] { box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--dsw-alias-border-l2, #d5d8df); border-radius:7px; padding:7px 12px; background:transparent; }
 .dsh-openai-delegation select { width:100%; max-width:100%; background:var(--dsw-alias-bg-layer-2, Canvas); }
+.dsh-openai-delegation .oa-delegate-search-label { font-size:12px; }
+.dsh-openai-delegation .oa-delegate-search { display:flex; align-items:center; gap:6px; }
+.dsh-openai-delegation input[type=search] { width:100%; min-width:0; flex:1; background:var(--dsw-alias-bg-layer-2, Canvas); }
+.dsh-openai-delegation input[type=search]::placeholder { color:var(--dsw-alias-label-tertiary, #737782); opacity:1; }
+.dsh-openai-delegation .oa-delegate-search button { flex-shrink:0; }
 .dsh-openai-delegation button { cursor:pointer; }
 .dsh-openai-delegation button:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.09)); }
 .dsh-openai-delegation .oa-delegate-primary { background:var(--dsw-alias-state-business-primary, #4d6bfe); color:white; border-color:transparent; }

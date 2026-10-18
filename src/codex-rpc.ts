@@ -20,7 +20,7 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>
 }
 
-/** Dedicated account-only Codex process. No shell or agent turns are invoked. */
+/** Dedicated account/catalog Codex process. No shell or agent turns are invoked. */
 export class CodexRpc implements RpcTransport {
   private process: ChildProcessWithoutNullStreams | null = null
   private ready: Promise<void> | null = null
@@ -106,7 +106,7 @@ export class CodexRpc implements RpcTransport {
       if (this.process === child) this.process = null
     })
     try {
-      await this.sendRequest('initialize', { clientInfo: { name: 'dsh_openai_subscription', title: 'DSH OpenAI Subscription', version: '0.3.0-rc.1' } })
+      await this.sendRequest('initialize', { clientInfo: { name: 'dsh_openai_subscription', title: 'DSH OpenAI Subscription', version: '0.4.0-rc.1' } })
       this.write({ method: 'initialized', params: {} })
     } catch (error) {
       await this.stopChild(child, true)
@@ -182,6 +182,7 @@ export class CodexRpc implements RpcTransport {
         clearTimeout(killTimer)
         clearTimeout(deadline)
         child.removeListener('close', onClose)
+        child.removeListener('exit', onExit)
         if (confirmed) {
           this.closedChildren.add(child)
           resolve()
@@ -191,10 +192,20 @@ export class CodexRpc implements RpcTransport {
       }
       const signal = (value: NodeJS.Signals) => { try { child.kill(value) } catch { /* only close confirms shutdown */ } }
       const onClose = () => finish(true)
+      const onExit = () => {
+        // Electron on Windows can leave our stdout/stderr pipes open after the
+        // native process exits. Release those owned handles only after exit is
+        // confirmed, then still wait for ChildProcess.close before unlocking.
+        for (const stream of [child.stdin, child.stdout, child.stderr]) {
+          try { stream.destroy() } catch { /* close remains the shutdown authority */ }
+        }
+      }
       const termTimer = setTimeout(() => signal('SIGTERM'), 500)
       const killTimer = setTimeout(() => signal('SIGKILL'), 1250)
       const deadline = setTimeout(() => finish(false), 3000)
       child.once('close', onClose)
+      child.once('exit', onExit)
+      if (child.exitCode != null || child.signalCode != null) onExit()
       try { child.stdin.end() } catch { /* escalation still runs */ }
       if (force) signal('SIGTERM')
     })

@@ -1,6 +1,6 @@
 # DSH Desktop / DSH NEXT 安装说明
 
-这是 `dsh-openai-subscription 0.3.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1)。
+这是 `dsh-openai-subscription 0.4.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.0-rc.1)。
 
 ## 适配目标
 

@@ -12,7 +12,7 @@ export const name = 'openai-subscription'
 export const inject = ['llm']
 
 /** Only these human-facing actions are available through DSH's authenticated Connection. */
-const actions = new Set(['state', 'refresh', 'login', 'cancelLogin', 'logout', 'prepareReset', 'consumeReset', 'delegationState', 'saveDelegation'])
+const actions = new Set(['state', 'refresh', 'login', 'cancelLogin', 'logout', 'prepareReset', 'consumeReset', 'modelCatalogState', 'refreshModels', 'delegationState', 'refreshDelegation', 'saveDelegation'])
 const MAX_RPC_BODY_BYTES = 16 * 1024
 
 /** Register the provider and its settings operations; disposing the plugin closes its child process. */
@@ -21,7 +21,18 @@ export async function apply(ctx: Context, input: Options): Promise<void> {
   const paths = runtimePaths(config, ctx)
   const service = new SubscriptionService({ ...paths, pollIntervalMs: config.pollIntervalMs, requestTimeoutMs: config.requestTimeoutMs })
   ctx.effect(() => () => service.dispose())
-  ctx.effect(() => ctx.llm.registerAdapter([PROVIDER_ID], createSubscriptionAdapter(ctx, service, config)))
+  ctx.effect(() => {
+    const registration = ctx.llm.registerAdapter([PROVIDER_ID], createSubscriptionAdapter(ctx, service, config))
+    let revision = service.modelCatalogSnapshot().revision
+    const unsubscribe = service.subscribeModels(() => {
+      const next = service.modelCatalogSnapshot().revision
+      if (next === revision) return
+      revision = next
+      // DSH's native picker listens to this registration update; keep the same adapter.
+      registration.replace([PROVIDER_ID])
+    })
+    return () => { unsubscribe(); registration() }
+  })
   const delegation = new DelegationSettings(ctx, paths.codexHome)
   ctx.effect(() => () => delegation.dispose())
   await delegation.initialize()
@@ -36,8 +47,17 @@ export async function apply(ctx: Context, input: Options): Promise<void> {
         : action === 'saveDelegation' ? ['revision', 'policy'] : []
       if (Object.keys(data).length !== expected.length || Object.keys(data).some(key => !expected.includes(key))) return badRequest()
       if (signal.aborted) return { ok: false, error: { code: 'gateway/cancelled', message: 'Request cancelled.', details: {} } }
-      if (action === 'delegationState' || action === 'saveDelegation') {
+      if (action === 'delegationState' || action === 'refreshDelegation' || action === 'saveDelegation') {
         try {
+          if (action === 'refreshDelegation') {
+            const catalog = await service.refreshModels()
+            if (signal.aborted) return { ok: false, error: { code: 'gateway/cancelled', message: 'Request cancelled.', details: {} } }
+            const view = await delegation.state(signal)
+            if (catalog.error && !view.catalogFailures.some(item => item.provider === PROVIDER_ID)) {
+              view.catalogFailures.push({ provider: PROVIDER_ID, message: catalog.error })
+            }
+            return { ok: true, value: view }
+          }
           if (action === 'delegationState') return { ok: true, value: await delegation.state(signal) }
           if (!Number.isSafeInteger(data.revision) || (data.revision as number) < 0) return badRequest()
           return { ok: true, value: await delegation.save(data.revision as number, data.policy, signal) }
@@ -51,6 +71,8 @@ export async function apply(ctx: Context, input: Options): Promise<void> {
       }
       try {
         switch (action) {
+          case 'modelCatalogState': return { ok: true, value: service.modelCatalogSnapshot() }
+          case 'refreshModels': return { ok: true, value: await service.refreshModels() }
           case 'state': return { ok: true, value: service.snapshot() }
           case 'refresh': return { ok: true, value: await service.refresh() }
           case 'login': return { ok: true, value: await service.login() }

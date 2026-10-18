@@ -1,6 +1,6 @@
 {
   "name": "dsh-openai-subscription",
-  "version": "0.3.0-rc.1",
+  "version": "0.4.0-rc.1",
   "description": "DSH ChatGPT subscription, usage windows, reset cards and DS/GPT subagent allocation",
   "type": "module",
   "license": "MIT",
@@ -19,7 +19,7 @@
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-settings"],
+      "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-api-remotes"],
       "platform": "web"
     }
   },

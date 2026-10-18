@@ -1,17 +1,17 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.3.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.4.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
 
 这是预发布候选：本地与隔离 Host 验证已通过，真实账号、模型调用和重置卡消费仍待验收。完整验证边界见 [项目状态](PROJECT_STATUS.md)。
 
 ## 安装
 
-从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
+从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
 
 Web 用户在下载目录执行，然后重启相应 profile：
 
 ```powershell
-$plugin = (Resolve-Path '.\dsh-openai-subscription-0.3.0-rc.1.tgz').Path
+$plugin = (Resolve-Path '.\dsh-openai-subscription-0.4.0-rc.1.tgz').Path
 dsh plugin --profile web add $plugin --ignore-scripts
 dsh web
 ```
@@ -23,15 +23,21 @@ dsh web
 ## 使用
 
 1. 打开 DSH **设置 → OpenAI 订阅**，点击登录并在官方登录页面完成授权。
-2. 在会话模型选择器选择 **OpenAI（ChatGPT 订阅）**，路由 ID 为 `openai-subscription`。模型及推理强度来自固定版本 Pi AI 的 Codex 模型目录，实际可用性由账号服务决定。
+2. 在会话模型选择器选择 **OpenAI（ChatGPT 订阅）**，路由 ID 为 `openai-subscription`。模型、默认推荐、输入能力与推理强度来自 Codex App Server 的 `model/list`，不再固定为 Pi AI 内置列表。
 3. 设置页展示服务实际返回的额度桶。只有 `windowDurationMins=300` 才显示 5 小时，`10080` 才显示每周；没有对应窗口时不显示。百分比为已用/剩余比例，重置时间按本地时区展示。
 4. 选择可用重置卡后先查看确认内容，确认才会调用重置接口。服务决定哪些窗口符合重置条件。超时或连接中断时显示结果待确认，只能用原操作 ID 重试；不会自动改用另一张卡。
 
 额度默认每 60 秒读取，在模型请求结束、服务额度通知和手动刷新时也会更新。通知可能只包含部分字段，因此通知触发完整读取。读取失败保留旧值并标记过期，不把未知额度显示为零或无限量。重置卡数量未知与确认为零分别显示。
 
+**设置 → OpenAI 订阅 → 模型目录** 可以搜索模型并手动同步，查看默认推荐与官方替代建议。插件首次读取时加载目录，之后随额度轮询最多每 15 分钟重新读取；目录变更通知 DSH 主选择器刷新。同步失败保留上次目录并提示过期，账户切换清空旧目录。Codex 可能返回其缓存或内置目录；“同步时间”是插件读取时间，不证明每次都从网络获取，模型是否可调用仍由账号权限与服务端决定。
+
+新模型可以直接进入目录，无需等待 Pi AI 更新模型名单；推理档位按目录原值发送，未知上下文容量不显示为已知数值。隐藏或当前文本适配器不支持的模型不会进入候选列表。已保存但从目录移除的模型会标记不可用，需自行重新选择，不自动切换模型。
+
 ## DS / GPT 子代理分配
 
 在 **设置 → 子代理分配** 启用此功能，选择模式和具体模型后保存，再新建对话。模型候选来自当前 DSH 已配置的提供方；先在 DSH 完成所需的 DS / GPT 账号或 API 配置。GPT 可以选本插件的订阅路由，也可以选 DSH 中已有的 GPT 路由。模型出现在目录中不代表已登录、有余额或已取得调用权限。
+
+DS 与 GPT 可分别按名称、ID 或提供方搜索，列表按提供方分组。刷新会同步订阅目录并重新读取 DSH 的模型候选，保留未保存草稿和现有选择。DeepSeek 目录由对应 DSH 提供方管理，本插件不会复制其凭据或虚构可用模型。
 
 | 模式 | 设置 | 运行方式 |
 | --- | --- | --- |
@@ -48,7 +54,7 @@ dsh web
 
 ## 账号与配置
 
-插件运行独立的 Codex App Server，只管理登录、额度和重置卡；模型调用复用 DSH 的 Pi AI 适配器、会话历史、图片处理、原生工具及审批流程。模型使用 Codex Responses/SSE，避免跨账号沿用缓存的 WebSocket 会话。
+插件运行独立的 Codex App Server，管理登录、模型目录、额度和重置卡；模型调用复用 DSH 的 Pi AI 适配器、会话历史、图片处理、原生工具及审批流程。模型使用 Codex Responses/SSE，避免跨账号沿用缓存的 WebSocket 会话。
 
 设置操作通过 DSH Connection 的精确 `/api/openai-subscription/*` 路由，沿用 Host/Origin 检查、浏览器认证和原生请求格式，与本体 Gateway 共存；插件请求体另限 16 KiB。
 

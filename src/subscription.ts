@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { CodexRpc, type RpcTransport } from './codex-rpc.ts'
 import type { AccountView, ResetOperation, SubscriptionView } from './shared.ts'
 import { parseUsage, record, usageAccountId } from './usage.ts'
+import { CATALOG_REFRESH_MS, emptyModelCatalog, readModelCatalog, type ModelCatalogView } from './model-catalog.ts'
 
 export interface SubscriptionConfig {
   codexPath: string
@@ -40,6 +41,11 @@ export class SubscriptionService {
   private readonly lockPath: string
   private state: SubscriptionView = { account: null, usage: null, stale: true, error: null, login: null, operation: null }
   private listeners = new Set<(view: SubscriptionView) => void>()
+  private modelState = emptyModelCatalog()
+  private modelListeners = new Set<(view: ModelCatalogView) => void>()
+  private modelRefresh: Promise<ModelCatalogView> | null = null
+  private modelLastAttempt = 0
+  private modelInvalidation = 0
   private accountId: string | null = null
   private epoch = 0
   private queue: Promise<unknown> = Promise.resolve()
@@ -69,6 +75,65 @@ export class SubscriptionService {
   }
 
   snapshot(): SubscriptionView { return structuredClone(this.state) }
+
+  modelCatalogSnapshot(): ModelCatalogView { return structuredClone(this.modelState) }
+
+  subscribeModels(listener: (view: ModelCatalogView) => void): () => void {
+    this.modelListeners.add(listener)
+    return () => { this.modelListeners.delete(listener) }
+  }
+
+  private publishModels(): ModelCatalogView {
+    const view = this.modelCatalogSnapshot()
+    for (const listener of this.modelListeners) { try { listener(view) } catch { /* catalog observers are isolated */ } }
+    return view
+  }
+
+  private clearModels(): void {
+    this.modelState = emptyModelCatalog(this.modelState.revision + 1)
+    this.modelLastAttempt = 0
+    this.publishModels()
+  }
+
+  /** Catalog access uses the same isolated process and exclusive home as account operations. */
+  refreshModels(): Promise<ModelCatalogView> {
+    if (!this.modelRefresh) {
+      this.modelRefresh = this.run(() => this.withLock(() => this.refreshModelsUnlocked()))
+        .catch(error => {
+          this.modelState = { ...this.modelState, stale: true, refreshing: false, error: errorText(error) }
+          return this.publishModels()
+        }).finally(() => { this.modelRefresh = null })
+    }
+    return this.modelRefresh
+  }
+
+  async ensureModels(): Promise<void> {
+    const expired = this.modelState.updatedAt === null || this.modelState.stale || Date.now() - this.modelState.updatedAt >= CATALOG_REFRESH_MS
+    if (expired && Date.now() - this.modelLastAttempt >= 30_000) await this.refreshModels()
+  }
+
+  private async refreshModelsUnlocked(): Promise<ModelCatalogView> {
+    this.modelLastAttempt = Date.now()
+    if (this.state.login) {
+      this.modelState = { ...this.modelState, stale: true, error: '请先完成 ChatGPT 登录后同步模型目录' }
+      return this.publishModels()
+    }
+    const epoch = this.epoch
+    const invalidation = this.modelInvalidation
+    this.modelState = { ...this.modelState, refreshing: true }
+    this.publishModels()
+    try {
+      const models = await readModelCatalog(this.rpc)
+      if (this.disposed || this.epoch !== epoch) throw new Error('账户已变化，已丢弃旧模型目录')
+      if (this.modelInvalidation !== invalidation) throw new Error('账户信息正在更新，模型目录已标记过期，请稍后同步')
+      const changed = JSON.stringify(models) !== JSON.stringify(this.modelState.models)
+      this.modelState = { models, revision: this.modelState.revision + Number(changed), updatedAt: Date.now(), stale: false,
+        refreshing: false, error: null, source: 'codex', remoteVerified: false }
+    } catch (error) {
+      this.modelState = { ...this.modelState, stale: true, refreshing: false, error: errorText(error) }
+    }
+    return this.publishModels()
+  }
 
   subscribe(listener: (view: SubscriptionView) => void): () => void {
     this.listeners.add(listener)
@@ -129,6 +194,11 @@ export class SubscriptionService {
       if (event.success === true) this.notifyAfterRequest()
     } else if (method === 'account/updated' || method === 'account/rateLimits/updated') {
       // Rolling notifications are sparse; never replace a full snapshot with them.
+      if (method === 'account/updated') {
+        this.modelInvalidation++
+        this.modelState = { ...this.modelState, stale: true }
+        this.publishModels()
+      }
       this.notifyAfterRequest()
     }
   }
@@ -182,6 +252,7 @@ export class SubscriptionService {
       this.epoch++
       this.state.usage = null
       this.accountId = credentials.accountId
+      this.clearModels()
     }
     this.state.account = account
   }
@@ -193,13 +264,14 @@ export class SubscriptionService {
     const response = await this.accountRead()
     const account = this.accountView(response)
     if (!account) {
-      if (this.accountId !== null) this.epoch++
+      if (this.accountId !== null) { this.epoch++; this.clearModels() }
       this.accountId = null
       this.state.account = null
       this.state.usage = null
       this.state.stale = false
       this.state.operation = journal && isPending(journal.operation) ? journal.operation : null
       this.state.error = journal?.operation.status === 'uncertain' ? UNCERTAIN : null
+      if (this.modelState.stale || this.modelState.updatedAt === null || Date.now() - this.modelState.updatedAt >= CATALOG_REFRESH_MS) await this.refreshModelsUnlocked()
       return this.publish()
     }
     const credentials = await this.credentials()
@@ -216,6 +288,7 @@ export class SubscriptionService {
     this.state.usage = parseUsage(raw)
     this.state.stale = false
     this.state.error = journal?.operation.status === 'uncertain' ? UNCERTAIN : null
+    if (this.modelState.stale || this.modelState.updatedAt === null || Date.now() - this.modelState.updatedAt >= CATALOG_REFRESH_MS) await this.refreshModelsUnlocked()
     return this.publish()
   }
 
@@ -230,6 +303,7 @@ export class SubscriptionService {
       if (url.protocol !== 'https:' || url.hostname !== 'auth.openai.com') throw new Error('Codex 返回了非官方登录地址，已拒绝打开')
       this.epoch++
       this.accountId = null
+      this.clearModels()
       this.state = { account: null, usage: null, stale: true, error: null, login: { id: result.loginId, url: result.authUrl }, operation: null }
       return this.publish()
     })))
@@ -251,6 +325,7 @@ export class SubscriptionService {
       await this.rpc.request('account/logout')
       this.epoch++
       this.accountId = null
+      this.clearModels()
       this.state = { account: null, usage: null, stale: false, error: null, login: null, operation: null }
       return this.publish()
     })))
@@ -434,6 +509,7 @@ export class SubscriptionService {
     if (this.scheduled) clearTimeout(this.scheduled)
     this.unsubscribe()
     this.listeners.clear()
+    this.modelListeners.clear()
     this.disposal = (async () => {
       // A failed shutdown leaves both the RPC process reference and this lock intact.
       // A later dispose() can retry; a second Host must not share the live auth cache.
