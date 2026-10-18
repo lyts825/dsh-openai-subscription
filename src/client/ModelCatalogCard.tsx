@@ -23,6 +23,15 @@ export function ModelCatalogCard({ load, refresh, getLocale }: ModelCatalogCardP
   const id = useId()
   const locale = getLocale().toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'
   const copy = locale === 'zh-CN' ? modelCatalogZh : modelCatalogEn
+  const compatibility = locale === 'zh-CN' ? {
+    excluded: '已排除当前通道不支持的推理档位',
+    unsupportedDefault: (effort: string) => `默认推理档位 ${effort} 与当前通道不兼容，请手动选择支持的档位。`,
+    existingUltra: '已有会话若使用 ultra，请在主模型选择器中重新选择支持的推理档位。',
+  } : {
+    excluded: 'Reasoning levels excluded because this channel does not support them',
+    unsupportedDefault: (effort: string) => `The default reasoning level ${effort} is incompatible with this channel. Manually select a supported level.`,
+    existingUltra: 'If an existing session uses ultra, choose a supported reasoning level again in the main model selector.',
+  }
 
   const perform = useCallback(async (action: 'load' | 'refresh', fillEmpty = false) => {
     if (!mounted.current || active.current) return
@@ -121,6 +130,14 @@ export function ModelCatalogCard({ load, refresh, getLocale }: ModelCatalogCardP
         <code>{model.id}</code>
         {model.description && <p className="oa-models-muted">{model.description}</p>}
         {model.upgrade && <p className="oa-models-upgrade">{copy.upgrade}: <code>{model.upgrade}</code></p>}
+        {(model.unsupportedReasoningEfforts?.length || model.unsupportedDefaultReasoningEffort) ? <div className="oa-models-notice">
+          {Boolean(model.unsupportedReasoningEfforts?.length) && <p>
+            {compatibility.excluded}: {model.unsupportedReasoningEfforts?.join(' · ')}
+          </p>}
+          {model.unsupportedDefaultReasoningEffort && <p>{compatibility.unsupportedDefault(model.unsupportedDefaultReasoningEffort)}</p>}
+          {(model.unsupportedReasoningEfforts?.includes('ultra') || model.unsupportedDefaultReasoningEffort === 'ultra')
+            && <p>{compatibility.existingUltra}</p>}
+        </div> : null}
         {(model.inputModalities.length > 0 || model.supportedReasoningEfforts.length > 0) && <details>
           <summary>{copy.details}</summary>
           {model.inputModalities.length > 0 && <p>{copy.input}: {model.inputModalities.map(item => copy[item]).join(' · ')}</p>}

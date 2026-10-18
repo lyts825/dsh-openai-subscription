@@ -106,7 +106,7 @@ export class CodexRpc implements RpcTransport {
       if (this.process === child) this.process = null
     })
     try {
-      await this.sendRequest('initialize', { clientInfo: { name: 'dsh_openai_subscription', title: 'DSH OpenAI Subscription', version: '0.4.0-rc.1' } })
+      await this.sendRequest('initialize', { clientInfo: { name: 'dsh_openai_subscription', title: 'DSH OpenAI Subscription', version: '0.4.1-rc.1' } })
       this.write({ method: 'initialized', params: {} })
     } catch (error) {
       await this.stopChild(child, true)

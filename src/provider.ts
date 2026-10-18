@@ -9,6 +9,7 @@ import type {} from '@deepseek-ai/dsh-attachment'
 import type { Options } from './config.ts'
 import { PROVIDER_ID } from './shared.ts'
 import type { CatalogModel, ModelCatalogView } from './model-catalog-types.ts'
+import { compatibleReasoning, isSupportedReasoningEffort } from './reasoning-effort.ts'
 
 /** The account service is the sole source of credentials and quota refreshes. */
 export interface ProviderAccount {
@@ -37,8 +38,8 @@ export function createSubscriptionAdapter(ctx: Context, account: ProviderAccount
       ...known,
       id: entry.id, name: entry.displayName, provider: PROVIDER_ID, api: 'openai-codex-responses',
       baseUrl: native.baseUrl!, input: [...entry.inputModalities], reasoning: effort !== null,
-      // A fresh per-call map avoids PiAi's fixed effort enum silently clamping new
-      // Codex levels (such as ultra). The medium slot is private; its wire value is exact.
+      // The private medium slot preserves an already validated Responses effort
+      // exactly; Codex agent modes such as ultra must never reach this map.
       thinkingLevelMap: { off: null, minimal: null, low: null, medium: effort, high: null, xhigh: null, max: null },
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       // Zero is the installed PiAi transport's unknown-context sentinel. Codex's
@@ -103,7 +104,7 @@ class SubscriptionAdapter extends LlmAdapter {
     signal?.throwIfAborted()
     await this.account.ensureModels()
     signal?.throwIfAborted()
-    return this.account.modelCatalogSnapshot().models
+    return this.account.modelCatalogSnapshot().models.map(compatibleReasoning)
   }
   private async entry(provider: string, model: string, signal?: AbortSignal): Promise<CatalogModel> {
     const entry = (await this.entries(provider, signal)).find(entry => entry.id === model)
@@ -137,9 +138,14 @@ class SubscriptionAdapter extends LlmAdapter {
   }
   private async *streamEntry(entry: CatalogModel, options: GenerateOptions): AsyncGenerator<StreamChunk> {
     if (options.provider !== PROVIDER_ID || options.model !== entry.id) throw new LlmError('Prepared model does not match request.', 'UNKNOWN_MODEL')
+    if (!entry.supportedReasoningEfforts.length && entry.unsupportedReasoningEfforts?.length) {
+      throw new LlmError(`模型 ${entry.id} 没有当前调用通道支持的推理档位。请同步模型目录或选择其他模型。`, 'UNSUPPORTED_REASONING_EFFORT')
+    }
     const effort = options.reasoningEffort ?? entry.defaultReasoningEffort
-    if (effort !== null && !entry.supportedReasoningEfforts.some(option => option.reasoningEffort === effort)) {
-      throw new LlmError(`模型 ${entry.id} 不支持推理档位 ${effort}`, 'UNSUPPORTED_REASONING_EFFORT')
+    const invalidDefault = options.reasoningEffort == null ? entry.unsupportedDefaultReasoningEffort : undefined
+    if (invalidDefault || (effort !== null && (!isSupportedReasoningEffort(effort) || !entry.supportedReasoningEfforts.some(option => option.reasoningEffort === effort)))) {
+      const choices = entry.supportedReasoningEfforts.map(option => option.reasoningEffort).join('、')
+      throw new LlmError(`当前调用通道不支持模型 ${entry.id} 的推理档位 ${invalidDefault ?? effort}。${choices ? `请在模型选择器重新选择：${choices}。` : '请同步模型目录或选择其他模型。'}`, 'UNSUPPORTED_REASONING_EFFORT')
     }
     const adapter = this.createCallAdapter(entry, effort)
     yield* adapter.stream({ ...options, reasoningEffort: effort === null ? undefined : ReasoningEffortId('medium') })

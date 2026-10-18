@@ -1,6 +1,7 @@
 import type { RpcTransport } from './codex-rpc.ts'
 import type { CatalogModel, ModelCatalogView } from './model-catalog-types.ts'
 import { record } from './usage.ts'
+import { compatibleReasoning } from './reasoning-effort.ts'
 
 export type { CatalogModel, ModelCatalogView } from './model-catalog-types.ts'
 export const CATALOG_REFRESH_MS = 15 * 60_000
@@ -13,7 +14,7 @@ function boundedString(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value)
 }
 
-/** Parse only the stable model/list fields, retaining exact model and effort ids. */
+/** Parse stable model/list fields and expose only transport-compatible reasoning ids. */
 export function parseCatalogModel(value: unknown): CatalogModel | null {
   const entry = record(value)
   if (!entry || !boundedString(entry.model, 256)) throw new Error('Codex 模型目录包含无效模型标识')
@@ -32,16 +33,16 @@ export function parseCatalogModel(value: unknown): CatalogModel | null {
   }).filter((value, index, all) => all.findIndex(other => other.reasoningEffort === value.reasoningEffort) === index)
   const defaultEffort = typeof entry.defaultReasoningEffort === 'string' ? entry.defaultReasoningEffort : null
   if (defaultEffort && efforts.length && !efforts.some(value => value.reasoningEffort === defaultEffort)) throw new Error('Codex 模型目录的默认推理档位不在支持列表中')
-  return {
+  return compatibleReasoning({
     id: entry.model,
     displayName: boundedString(entry.displayName, 512) ? entry.displayName : entry.model,
     description: typeof entry.description === 'string' ? entry.description.slice(0, 4000) : '',
     isDefault: entry.isDefault === true,
     inputModalities,
     supportedReasoningEfforts: efforts,
-    defaultReasoningEffort: efforts.length ? defaultEffort : null,
+    defaultReasoningEffort: defaultEffort,
     upgrade: boundedString(entry.upgrade, 256) ? entry.upgrade : null,
-  }
+  })
 }
 
 /** A full traversal is atomic: partial/looping pages never replace a usable snapshot. */

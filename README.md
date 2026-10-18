@@ -1,17 +1,17 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.4.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.4.1-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
 
 这是预发布候选：本地与隔离 Host 验证已通过，真实账号、模型调用和重置卡消费仍待验收。完整验证边界见 [项目状态](PROJECT_STATUS.md)。
 
 ## 安装
 
-从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
+从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.1-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
 
 Web 用户在下载目录执行，然后重启相应 profile：
 
 ```powershell
-$plugin = (Resolve-Path '.\dsh-openai-subscription-0.4.0-rc.1.tgz').Path
+$plugin = (Resolve-Path '.\dsh-openai-subscription-0.4.1-rc.1.tgz').Path
 dsh plugin --profile web add $plugin --ignore-scripts
 dsh web
 ```
@@ -31,7 +31,9 @@ dsh web
 
 **设置 → OpenAI 订阅 → 模型目录** 可以搜索模型并手动同步，查看默认推荐与官方替代建议。插件首次读取时加载目录，之后随额度轮询最多每 15 分钟重新读取；目录变更通知 DSH 主选择器刷新。同步失败保留上次目录并提示过期，账户切换清空旧目录。Codex 可能返回其缓存或内置目录；“同步时间”是插件读取时间，不证明每次都从网络获取，模型是否可调用仍由账号权限与服务端决定。
 
-新模型可以直接进入目录，无需等待 Pi AI 更新模型名单；推理档位按目录原值发送，未知上下文容量不显示为已知数值。隐藏或当前文本适配器不支持的模型不会进入候选列表。已保存但从目录移除的模型会标记不可用，需自行重新选择，不自动切换模型。
+新模型可以直接进入目录，无需等待 Pi AI 更新模型名单；推理档位取模型目录与当前调用通道的交集，支持的值原样发送，未知上下文容量不显示为已知数值。隐藏或当前文本适配器不支持的模型不会进入候选列表。已保存但从目录移除的模型会标记不可用，需自行重新选择，不自动切换模型。
+
+从 `0.4.0-rc.1` 升级后，若旧会话选用了 `ultra`，请在会话模型选择器重新选择该模型支持的档位（例如列表中存在的 `max` 或 `xhigh`），再重试。`ultra` 是 Codex 模式，不是当前 Responses 通道可直接发送的推理值；插件不将其静默映射为其他档位。目录会说明被排除的档位；默认档位不兼容时也必须手动选择，旧会话数据保持原样。
 
 ## DS / GPT 子代理分配
 

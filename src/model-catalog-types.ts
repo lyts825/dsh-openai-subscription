@@ -7,6 +7,10 @@ export interface CatalogModel {
   inputModalities: ('text' | 'image')[]
   supportedReasoningEfforts: { reasoningEffort: string; description: string }[]
   defaultReasoningEffort: string | null
+  /** Catalog modes that cannot be sent through the current Responses transport. */
+  unsupportedReasoningEfforts?: string[]
+  /** Preserve an unusable catalog default so callers require an explicit selection. */
+  unsupportedDefaultReasoningEffort?: string
   upgrade: string | null
 }
 

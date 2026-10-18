@@ -1,6 +1,6 @@
 {
   "name": "dsh-openai-subscription",
-  "version": "0.4.0-rc.1",
+  "version": "0.4.1-rc.1",
   "description": "DSH ChatGPT subscription, usage windows, reset cards and DS/GPT subagent allocation",
   "type": "module",
   "license": "MIT",
