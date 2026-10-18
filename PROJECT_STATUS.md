@@ -1,10 +1,11 @@
 # 项目状态
 
-- 日期：2026-10-17（Asia/Shanghai）。
+- 日期：2026-10-18（Asia/Shanghai）。
 - 当前迭代：`0.2.0-rc.1` → `0.3.0-rc.1`，DS/GPT 子代理分配实现、必要验证与候选安装包 **已完成**；真实跨模型调用及原订阅功能真实账号仍 **待验收**，未发布到 npm。
 - 兼容基线：官方 DeepSeek Harness `dsh-v0.2.0-rc.2`，提交 `639ed015397290b3745d163aafe02ffee4aa3f84`；随附 Codex `0.162.1`、Pi AI `0.87.1`。
 - 用户选择：官方 Desktop 与 DSH NEXT 两者都支持；先交付安装包，真实账号稍后验收；公开仓库使用 `lyts825/dsh-openai-subscription`，本次不消费重置卡。
-- GitHub 交付标识：[`v0.3.0-rc.1`](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1)，采用预发布标签和 Pre-release，发布状态以该页面为准；稳定版需真实账号验收后另行发布。安装包作为 Release 附件，不纳入源码提交。
+- GitHub 交付：[`v0.3.0-rc.1`](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.3.0-rc.1) 已发布为 Pre-release，版本提交 `2ebb4fb0ac42b21175b849837290fa749a33df93`；TGZ、桌面 ZIP 与 SHA256SUMS 均已上传并核对。稳定版需真实账号验收后另行发布。安装包作为 Release 附件，不纳入源码提交。
+- 本地部署：已通过 DSH NEXT `2.0.17-next` 原生 CLI 安装并启用到实际 `desktop` profile，安装前已备份配置，持久安装源保存在 DSH Home 的 `plugins/dsh-openai-subscription/`。本次不升级插件版本、不重新打包应用；真实账号验收仍待用户登录。
 - 功能基线：`0.2.0-rc.1` 提交 `5ce79830bd68cc97514f3a2eb7adeb7eca0b60ac`；0.2.0 实现提交 `a348f6523d0b66f4304d032e2028dd53cf527fa1`。本轮复用 DSH 原生子代理，新增自动选择 DS/GPT 与手动固定模型；不另建模型执行或审批通道。
 
 ## 交付范围
@@ -25,6 +26,8 @@
 
 ## 验证证据
 
+- 2026-10-18 实际本地部署：原生 CLI 联网安装退出码 0；安装版本、Host/Client SHA-256、bundle 启用状态、原有依赖声明与 bundle 顺序均通过核对。原生 profile 解析与插件配置 schema 加载通过，无 error 诊断；没有启动完整 Host、会话或调度器，也没有调用账号服务。已有 Cordis 配置和 workspace 配置保持不变；运行时 LAN 列表在本轮恢复前已由应用更新，本次安装没有覆盖。Aegis 两份缓存的 561 个文件摘要完全一致，当前 DSH 入口与缓存匹配。
+- 部署诊断中，泛型 `--config.fetch-timeout` 参数被 pnpm 保留为字符串，导致请求前的超时初始化异常等待；移除该参数后下载和安装成功。未手动改写应用自带 pnpm、全局配置或缓存数据库；诊断临时材料不纳入 Git，安装回执和必要验证材料保留在忽略目录。
 - `0.3.0-rc.1` 配置验证 9 项通过：严格字段与路由、模型目录故障隔离、原生能力检测、自动/手动保存、损坏配置拒绝覆盖、跨实例及真实双进程 CAS、取消、过期锁回收；未读取账号凭据。
 - 分配设置 UI 13 项通过：双模式切换、模型选择、保存与取消、冲突和过期状态、丢失保存响应后的收敛、卸载取消及中英文文案。原订阅 UI 15 项回归通过。
 - 原生 Connection 路由 6 项通过：旧接口与 Gateway 共存、认证/Origin、载荷与大小限制、两个设置页的精确调用，以及分配配置 CAS、非法字段拒绝和卸载清理。
