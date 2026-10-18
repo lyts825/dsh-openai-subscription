@@ -1,12 +1,12 @@
 # 项目状态
 
 - 日期：2026-10-18（Asia/Shanghai）。
-- 当前迭代：`0.4.0-rc.1` → `0.4.1-rc.1`，非法 `ultra` 推理参数修复与必要验证 **已完成**，正在整理发布；真实账号与模型调用仍 **待验收**，未发布到 npm。本轮用户选择暂不本地安装。
+- 当前迭代：`0.4.0-rc.1` → `0.4.1-rc.1`，非法 `ultra` 推理参数修复、必要验证与 GitHub 交付 **已完成**；真实账号与模型调用仍 **待验收**，未发布到 npm。本轮用户选择暂不本地安装。
 - 本轮验收：可发送推理档位、默认值与旧会话预检、两种桌面 Host、版本包、GitHub 发布和安全本地升级。0.4.0 动态目录与模型选择功能作为兼容基线保留。
 - 兼容基线：官方 DeepSeek Harness `dsh-v0.2.0-rc.2`，提交 `639ed015397290b3745d163aafe02ffee4aa3f84`；随附 Codex `0.162.1`、Pi AI `0.87.1`。
 - 用户选择：官方 Desktop 与 DSH NEXT 两者都支持；先交付安装包，真实账号稍后验收；公开仓库使用 `lyts825/dsh-openai-subscription`，本次不消费重置卡。
-- GitHub 交付：[`v0.4.0-rc.1`](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.0-rc.1) 已发布为 Pre-release，标签对应提交 `6ce1e859b94d0d0655b45b2207d6d9816f3c49e2`；TGZ、桌面 ZIP 与 SHA256SUMS 均已上传，远端附件 SHA-256 与本地完全一致。稳定版需真实账号验收后另行发布。安装包作为 Release 附件，不纳入源码提交。
-- 本地部署：用户完全退出应用后，已通过 DSH NEXT `2.0.17-next` 原生 CLI 将实际 `desktop` profile 从 `0.3.0-rc.1` 升级到 `0.4.0-rc.1` 并保持启用。安装前备份配置，持久安装源保存在 DSH Home 的 `plugins/dsh-openai-subscription/`；原有配置、其他插件依赖和 bundle 顺序保持不变。重新打开 NEXT 即可使用，真实账号验收仍待用户登录。
+- GitHub 交付：[`v0.4.1-rc.1`](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.1-rc.1) 已发布为 Pre-release，标签对应修复提交 `2a4dcb5`；TGZ、桌面 ZIP 与 SHA256SUMS 均已上传，远端附件 SHA-256 与本地完全一致。稳定版需真实账号验收后另行发布。安装包作为 Release 附件，不纳入源码提交。
+- 本地部署：实际 DSH NEXT `desktop` profile 仍为 `0.4.0-rc.1`，本轮用户明确选择暂不安装修复包，实际 profile 未改动。既有配置与安装备份保留；后续完全退出应用后可安装 `0.4.1-rc.1`。
 - 功能基线：`0.2.0-rc.1` 提交 `5ce79830bd68cc97514f3a2eb7adeb7eca0b60ac`；0.2.0 实现提交 `a348f6523d0b66f4304d032e2028dd53cf527fa1`。本轮复用 DSH 原生子代理，新增自动选择 DS/GPT 与手动固定模型；不另建模型执行或审批通道。
 
 ## 0.4.1 补丁迭代
@@ -19,7 +19,8 @@
 - 验证通过：34 项定向回归（目录与传输 13、原模型适配 9、目录 UI 12）、Host/Client 类型检查与构建。覆盖七种合法值精确发送、非法显式/默认值零凭据与 HTTP、仅有非法档位且默认缺失时拒绝、真正无推理模型保持无字段、两类 HTTP 400 单次请求且保留原错误。
 - 两端原生 CLI 将最终代码装入独立 fixture；NEXT `2.0.17-next` 与官方 rc.2 Desktop Host 均通过目录、主选择器与子代理候选同步，`ultra` 被排除且设置页保留说明。两端自然 exit 0、shutdown-complete、无强制结束、锁释放。没有 OAuth、账号读取、真实推理或卡消费。
 - 本机仍为 `0.4.0-rc.1`。修复包可用后，用户明确选择“暂不安装，先交付修复包”；本轮不修改实际 profile。后续退出应用再运行包内安装器，已有 Ultra 会话手动重选支持档位。
-- 发布准备：正式源码、说明与版本号纳入 Git；必要回归与 fixture 保留在忽略目录；安装包仅通过 Release 附件分发。真实订阅请求仍待用户验收，不消费重置卡。
+- 发布完成：修复提交 `2a4dcb5` 与标签 `v0.4.1-rc.1` 已推送；GitHub Pre-release 三项附件均核对成功，TGZ 35 项、ZIP 4 项，代码与两端已验证产物一致。TGZ SHA-256 为 `6c14e1bc1e42b09de0f139e07c4af39c85088a1f26f122abf29cf6820ee4e96f`；ZIP 为 `ace216514b5964a7611175300ebc7ead2168fdeb7c3b7e6505025805c7e16a9e`。
+- 清理：本轮已失效的首个候选包已删除；正式包、已验证 fixture 依赖、必要回归与后续安装准备保留在忽略目录。无测试材料进入 Git/Release，两个隔离 Host 已退出。真实订阅请求仍待用户验收，不消费重置卡。
 
 ## 0.4.0 交付范围
 
