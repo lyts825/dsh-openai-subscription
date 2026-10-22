@@ -1,17 +1,17 @@
 # DSH OpenAI Subscription
 
-在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.4.1-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
+在 DSH 中使用 ChatGPT/Codex 订阅模型，查看 5 小时、每周额度与使用官方额度重置卡，并让主代理将子任务分配给 DS 或 GPT。插件版本 `0.5.0-rc.1`，兼容基线为 DSH `0.2.0-rc.2`，支持官方 Desktop 和 DSH NEXT `2.0.17-next`。开发和独立 Web 运行需要 Node.js 24.2 或以上版本；桌面版使用应用自带运行时。
 
 这是预发布候选：本地与隔离 Host 验证已通过，真实账号、模型调用和重置卡消费仍待验收。完整验证边界见 [项目状态](PROJECT_STATUS.md)。
 
 ## 安装
 
-从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.1-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
+从 [GitHub 预发布页](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.5.0-rc.1) 下载桌面 ZIP 或 Web 使用的 `.tgz`。桌面用户按 [Desktop / NEXT 安装说明](desktop/README.zh.md) 操作；官方桌面版使用随附 DSH CLI 与 `desktop` profile，NEXT 使用自己的包管理入口。
 
 Web 用户在下载目录执行，然后重启相应 profile：
 
 ```powershell
-$plugin = (Resolve-Path '.\dsh-openai-subscription-0.4.1-rc.1.tgz').Path
+$plugin = (Resolve-Path '.\dsh-openai-subscription-0.5.0-rc.1.tgz').Path
 dsh plugin --profile web add $plugin --ignore-scripts
 dsh web
 ```
@@ -41,10 +41,16 @@ dsh web
 
 DS 与 GPT 可分别按名称、ID 或提供方搜索，列表按提供方分组。刷新会同步订阅目录并重新读取 DSH 的模型候选，保留未保存草稿和现有选择。DeepSeek 目录由对应 DSH 提供方管理，本插件不会复制其凭据或虚构可用模型。
 
+每条路由可单独选择**推理档位**，选项来自该模型当前公布的能力。例如，DS 可选择其支持的较低档位，GPT 可选择其支持的较高档位。两者独立保存，主代理不能通过工具参数改写固定档位。
+
+选择“跟随 DSH 默认”时，子代理与主代理使用相同路由会继承兼容的主代理档位；切换路由则使用目标模型默认值。旧配置没有档位字段，升级后仍沿用这一规则。
+
+手动更换模型会清除该路由草稿中的显式档位，并显示提示；搜索和刷新保留档位。如果当前模型不再支持已选档位，页面会保留并标记该值，启用保存前必须重选。保存时检查活动路由，创建子代理前由 DSH 再次校验；关闭分配时仍可保留选择。
+
 | 模式 | 设置 | 运行方式 |
 | --- | --- | --- |
-| 自动分配 | 分别选择一个 DS、一个 GPT 的提供方与模型 | 主代理根据任务调用 `delegate_to_deepseek` 或 `delegate_to_gpt` |
-| 手动指定 | 选择 DS 或 GPT，再指定该类的提供方与模型 | 只开放指定的子代理工具；执行时拒绝覆盖模型 |
+| 自动分配 | 分别选择 DS、GPT 的提供方、模型和推理档位 | 主代理根据任务调用 `delegate_to_deepseek` 或 `delegate_to_gpt` |
+| 手动指定 | 选择 DS 或 GPT，固定其模型和推理档位 | 只开放指定的子代理工具；执行时拒绝覆盖模型或档位 |
 
 例如用 GPT 作为主模型，自动模式可让它把检索整理任务分配给 DS、把其他任务分配给 GPT；手动选 DS 后，新建子代理固定使用指定的 DS 模型。“自动”指主模型决定分工，不按额度或价格自动切换。所选模型不可用时返回错误，不静默回退。
 
@@ -52,7 +58,9 @@ DS 与 GPT 可分别按名称、ID 或提供方搜索，列表按提供方分组
 
 子任务使用 DSH 原生 `spawn` 子会话与可继续的后台任务，沿用权限、审批、任务结果收集和取消。启用分配的对话会禁用本体其他新建子代理入口（包括原 `subagent*`、workflow、Ralph 和 Agent Team 的 `spawn_teammate`），避免绕过手动指定；已有子代理的查看、发消息和中断操作仍可用。安装其他第三方创建子会话的工具不在本版路由保证范围内。
 
-分配默认设置保存在当前插件数据目录的 `dsh-delegation-settings.json`，会话快照保存在 DSH 原生存储域。设置页并发保存发生冲突时需刷新后重新保存；损坏的配置不会被静默覆盖。分配文件只存提供方及模型 ID，不复制 DS 或 GPT 凭据。
+分配默认设置保存在当前插件数据目录的 `dsh-delegation-settings.json`，会话快照保存在 DSH 原生存储域。设置页并发保存发生冲突时需刷新后重新保存；损坏的配置不会被静默覆盖。分配文件只存路由、可选推理档位和分配策略，不复制 DS 或 GPT 凭据。
+
+新版本能读取旧配置。`0.4.x` 不认识新增字段，无法读取含显式档位的设置或会话策略。将默认设置改回“跟随 DSH 默认”也不会改写已有会话；需要恢复这类会话时，请继续使用 `0.5.0` 或后续兼容版本。
 
 ## 账号与配置
 

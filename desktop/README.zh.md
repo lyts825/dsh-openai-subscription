@@ -1,6 +1,6 @@
 # DSH Desktop / DSH NEXT 安装说明
 
-这是 `dsh-openai-subscription 0.4.1-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.4.1-rc.1)。
+这是 `dsh-openai-subscription 0.5.0-rc.1` 桌面插件预发布包，ZIP 内含已构建的 npm 包、Windows 安装脚本和 SHA-256 清单；不包含 DSH 应用安装程序。下载入口：[GitHub Releases](https://github.com/lyts825/dsh-openai-subscription/releases/tag/v0.5.0-rc.1)。
 
 ## 适配目标
 
@@ -36,8 +36,10 @@ NEXT 自定义 profile 追加 `-Profile your-profile`。`-ValidateOnly` 只检�
 如果系统策略禁止运行 PowerShell 脚本，可使用应用的插件管理功能安装解压得到的 `.tgz` 本地包，启用 `dsh-openai-subscription` 后重启。使用 CLI 时应使用相应桌面应用自带的 CLI，并添加 `--ignore-scripts`；不要用独立安装的 npm DSH 管理官方 Desktop 保留的 profile。
 
 4. 重开应用，在 **设置 → OpenAI 订阅** 登录。授权链接使用系统浏览器；如无法自动打开，可点击复制登录链接。登录完成后回到应用刷新。
-5. 模型选择器中选择 **OpenAI（ChatGPT 订阅）**。目录由固定版本适配器提供，实际模型权限取决于账号。
-6. 如需跨模型子代理，打开 **设置 → 子代理分配**：自动模式分别选择 DS / GPT 模型，由主代理决定每次分工；手动模式选择 DS 或 GPT 并固定具体模型。保存后新建对话。默认关闭，旧对话保留原设置；模型不可用时不会自动切换。
+5. 模型选择器中选择 **OpenAI（ChatGPT 订阅）**。插件从随附 Codex 读取模型目录，实际模型权限取决于账号。
+6. 如需跨模型子代理，打开 **设置 → 子代理分配**。自动模式分别选择 DS/GPT 模型，由主代理决定每次分工；手动模式固定其中一方。每条路由可单独选择模型支持的推理档位，保存后新建对话。
+
+“跟随 DSH 默认”保留原生继承规则：同模型继承兼容的主代理档位，换模型使用目标默认值。更换模型会清除该路由草稿中的显式档位，刷新目录保留草稿。分配默认关闭，旧对话保持原策略；模型或档位不可用时，需要手动重选。
 
 ## 桌面行为与数据
 

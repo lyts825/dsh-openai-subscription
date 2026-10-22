@@ -2,6 +2,8 @@
 export interface DelegationRoute {
   provider: string
   model: string
+  /** Omission preserves DSH's native inherited effort behavior. */
+  reasoningEffort?: string
 }
 
 export type DelegationTarget = 'ds' | 'gpt'
@@ -19,6 +21,10 @@ export interface DelegationCandidate extends DelegationRoute {
   target: DelegationTarget
   providerName: string
   modelName: string
+  reasoning?: {
+    efforts: { id: string; name: string; description?: string }[]
+    defaultEffort?: string
+  }
 }
 
 /** Display metadata only. Catalog membership does not prove login or available quota. */

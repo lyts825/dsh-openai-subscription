@@ -2,6 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import * as subagentTool from '@deepseek-ai/dsh-tool-subagent'
@@ -48,9 +49,14 @@ function mountPolicy(agent: Agent, policy: DelegationPolicy): OwnedFiber | undef
       if (!route) throw new Error('Enabled delegation policy has no selected route')
       subagentTool.apply(scoped, {
         provider: 'spawn', toolName: toolNames[target], modelSelectionSettings: false,
-        backgroundMode: 'continuable', agentOptions: { ...route },
+        backgroundMode: 'continuable', agentOptions: {
+          provider: route.provider, model: route.model,
+          ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
+        },
       }, agent.session)
-      return `${toolNames[target]}: ${route.provider}/${route.model}`
+      return `${toolNames[target]}: ${route.provider}/${route.model}; reasoning effort: ${route.reasoningEffort === undefined
+        ? 'DSH default (may inherit the current parent effort for the same route; a changed route uses the target model default)'
+        : `fixed ${route.reasoningEffort}`}`
     })
     scoped.tools.guard(exec => blocked(exec.name)
       ? `This conversation uses fixed delegation routes. Create children with ${[...allowed].join(' or ')}; ${exec.name} is disabled for this conversation.`
@@ -81,6 +87,7 @@ export async function installDelegationRuntime(ctx: Context, policy: () => Deleg
   await ctx.inject(['agents', 'storageDomain', 'tools', 'subagents', 'systemPrompt', 'sessionProjections', 'sessionPersistence', 'sessionQuery'], async owner => {
     const installed = new Map<Agent, Promise<OwnedFiber | undefined>>()
     const policies = new Map<SessionId, Promise<DelegationPolicy | undefined>>()
+    const retired = new WeakSet<Agent>()
     let stopping = false
     let loading = true
     let loadFailure: string | undefined
@@ -119,17 +126,28 @@ export async function installDelegationRuntime(ctx: Context, policy: () => Deleg
       const fresh = created && agent.session.firstLiveSeq === 0
         && agent.session.eventAt(SessionSeq(0))?.type !== 'session/end-seed'
       const configured = fresh && agent.session.header.origin !== 'subagent' ? parseDelegationPolicy(policy()) : undefined
+      const inactive = () => stopping || retired.has(agent) || agent.ctx.fiber.uid === null
       const pending = (async () => {
-        if (stopping) return
+        if (inactive()) return
         const captured = await load(agent.id, async () => {
           if (!fresh) return
           const parent = agent.session.header.origin === 'subagent' ? agent.session.header.parentSession : undefined
           return parseDelegationPolicy(parent ? await load(parent) ?? defaultDelegationPolicy() : configured ?? defaultDelegationPolicy())
         })
-        if (stopping || !captured) return
-        const fiber = mountPolicy(agent, parseDelegationPolicy(captured))
-        try { await fiber?.await() }
-        catch (error) { await fiber?.dispose(); throw error }
+        if (inactive() || !captured) return
+        let fiber: OwnedFiber | undefined
+        try {
+          fiber = mountPolicy(agent, parseDelegationPolicy(captured))
+          await fiber?.await()
+        } catch (error) {
+          await fiber?.dispose()
+          // A child may finish while HMR restores its policy. Cancellation of
+          // that Agent's mounting scope must not disable unrelated Sessions.
+          // Storage errors above still reach the fail-closed handler below.
+          if (inactive()) return
+          throw error
+        }
+        if (inactive()) { await fiber?.dispose(); return }
         return fiber
       })().catch(error => {
         loadFailure = 'Conversation delegation policy could not be loaded. Child creation is disabled; repair the stored policy and reload the plugin.'
@@ -142,6 +160,7 @@ export async function installDelegationRuntime(ctx: Context, policy: () => Deleg
 
     owner.on('agent/created', async ({ agent }) => { await install(agent, true) })
     owner.on('agent/disposed', ({ agent }) => {
+      retired.add(agent)
       const pending = installed.get(agent)
       installed.delete(agent)
       void pending?.then(fiber => fiber?.dispose()).catch(error => owner.logger.warn(String(error)))

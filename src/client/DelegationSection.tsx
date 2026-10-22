@@ -21,9 +21,11 @@ interface Editor {
 }
 
 const routeKey = (route: DelegationRoute | null): string => route ? JSON.stringify([route.provider, route.model]) : ''
+const sameRoute = (left: DelegationRoute | null, right: DelegationRoute | null): boolean =>
+  routeKey(left) === routeKey(right) && left?.reasoningEffort === right?.reasoningEffort
 const samePolicy = (left: DelegationPolicy, right: DelegationPolicy): boolean =>
   left.enabled === right.enabled && left.mode === right.mode && left.manualTarget === right.manualTarget
-  && routeKey(left.ds) === routeKey(right.ds) && routeKey(left.gpt) === routeKey(right.gpt)
+  && sameRoute(left.ds, right.ds) && sameRoute(left.gpt, right.gpt)
 const copyPolicy = (policy: DelegationPolicy): DelegationPolicy => ({
   ...policy, ds: policy.ds ? { ...policy.ds } : null, gpt: policy.gpt ? { ...policy.gpt } : null,
 })
@@ -35,6 +37,7 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
   const [failure, setFailure] = useState<{ key: DelegationLocaleKey; details: string } | null>(null)
   const [saved, setSaved] = useState(false)
   const [search, setSearch] = useState<Record<DelegationTarget, string>>({ ds: '', gpt: '' })
+  const [reasoningReset, setReasoningReset] = useState<Record<DelegationTarget, boolean>>({ ds: false, gpt: false })
   const [catalogInvalidation, setCatalogInvalidation] = useState(0)
   const mounted = useRef(false)
   const active = useRef<AbortController | null>(null)
@@ -103,8 +106,12 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
   const dirty = Boolean(editor && !samePolicy(editor.draft, editor.view.policy))
   const conflicted = Boolean(editor && dirty && editor.revision !== editor.view.revision)
   const stale = Boolean(view && failure)
-  const routeAvailable = (target: DelegationTarget): boolean => Boolean(draft?.[target]
-    && view?.candidates.some(candidate => candidate.target === target && routeKey(candidate) === routeKey(draft[target])))
+  const candidateFor = (target: DelegationTarget) => view?.candidates.find(candidate => candidate.target === target
+    && routeKey(candidate) === routeKey(draft?.[target] ?? null))
+  const modelAvailable = (target: DelegationTarget): boolean => Boolean(draft?.[target] && candidateFor(target))
+  const routeAvailable = (target: DelegationTarget): boolean => modelAvailable(target)
+    && (draft?.[target]?.reasoningEffort === undefined
+      || candidateFor(target)?.reasoning?.efforts.some(effort => effort.id === draft?.[target]?.reasoningEffort) === true)
   const invalid = Boolean(draft?.enabled && (draft.mode === 'auto'
     ? !routeAvailable('ds') || !routeAvailable('gpt')
     : !routeAvailable(draft.manualTarget)))
@@ -120,6 +127,7 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
   const discard = () => {
     if (busy) return
     setSaved(false)
+    setReasoningReset({ ds: false, gpt: false })
     setEditor(current => current ? { ...current, draft: copyPolicy(current.view.policy), revision: current.view.revision } : current)
   }
   const commit = async () => {
@@ -136,6 +144,7 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
       if (samePolicy(policy, result.policy)) {
         setFailure(null)
         setSaved(true)
+        setReasoningReset({ ds: false, gpt: false })
       } else {
         setFailure({ key: 'saveFailed', details: result.error ?? '' })
       }
@@ -155,6 +164,10 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
     const selected = draft[target]
     const selectedCandidate = candidates.find(candidate => routeKey(candidate) === routeKey(selected))
     const unavailable = selected !== null && !selectedCandidate
+    const efforts = selectedCandidate?.reasoning?.efforts ?? []
+    const selectedEffort = selected?.reasoningEffort
+    const unavailableEffort = selectedEffort !== undefined && !efforts.some(effort => effort.id === selectedEffort)
+    const effortDescription = efforts.find(effort => effort.id === selectedEffort)?.description
     const terms = search[target].trim().normalize('NFKC').toLowerCase().split(/\s+/).filter(Boolean)
     const matches = candidates.filter(candidate => {
       const searchable = `${candidate.modelName} ${candidate.model} ${candidate.providerName} ${candidate.provider}`.normalize('NFKC').toLowerCase()
@@ -198,10 +211,13 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
       </p>
       <select id={selectId} value={routeKey(selected)}
         disabled={locked || !draft.enabled || !view.available || unused}
-        aria-describedby={`${selectId}-help`} aria-invalid={draft.enabled && !unused && !routeAvailable(target)}
+        aria-describedby={`${selectId}-help`} aria-invalid={draft.enabled && !unused && !modelAvailable(target)}
         onChange={event => {
           const candidate = candidates.find(candidate => routeKey(candidate) === event.target.value)
-          edit({ [target]: candidate ? { provider: candidate.provider, model: candidate.model } : null })
+          const route = candidate ? { provider: candidate.provider, model: candidate.model } : null
+          if (routeKey(route) === routeKey(selected)) return
+          setReasoningReset(current => ({ ...current, [target]: selectedEffort !== undefined && route !== null }))
+          edit({ [target]: route })
         }}>
         <option value="">{t('chooseModel')}</option>
         {unavailable && <option value={routeKey(selected)} disabled>
@@ -221,6 +237,31 @@ export function DelegationSection({ t, load, refresh: refreshCatalog, subscribeC
         {unavailable && <p className="oa-delegate-invalid">{t('unavailableHint')}</p>}
         {selectedFiltered && <p>{t('selectedFiltered')}</p>}
         {unused ? <p>{t('optionalModel')}</p> : candidates.length === 0 ? <p>{t('noModels')}</p> : null}
+      </div>
+      <label htmlFor={`${selectId}-reasoning`}>{t(target === 'ds' ? 'deepseekReasoning' : 'gptReasoning')}</label>
+      <select id={`${selectId}-reasoning`} value={selectedEffort ?? ''}
+        disabled={locked || !draft.enabled || !view.available || unused || !selectedCandidate}
+        aria-describedby={`${selectId}-reasoning-help`} aria-invalid={draft.enabled && !unused && unavailableEffort}
+        onChange={event => {
+          if (!selected) return
+          const effort = event.target.value
+          if (effort && !efforts.some(item => item.id === effort)) return
+          setReasoningReset(current => ({ ...current, [target]: false }))
+          edit({ [target]: { provider: selected.provider, model: selected.model, ...(effort ? { reasoningEffort: effort } : {}) } })
+        }}>
+        <option value="">{t('followDshDefault')}</option>
+        {unavailableEffort && <option value={selectedEffort} disabled>{t('unavailableReasoning')} · {selectedEffort}</option>}
+        {efforts.map(effort => <option key={effort.id} value={effort.id}>
+          {effort.name === effort.id ? effort.name : `${effort.name} (${effort.id})`}
+          {effort.id === selectedCandidate?.reasoning?.defaultEffort ? ` · ${t('modelDefaultReasoning')}` : ''}
+        </option>)}
+      </select>
+      <div id={`${selectId}-reasoning-help`} className="oa-delegate-muted oa-delegate-route">
+        <p>{selected ? t('followDshDefaultHint') : t('chooseModelForReasoning')}</p>
+        {selected && efforts.length === 0 && !unavailable && <p>{t('noReasoningChoices')}</p>}
+        {effortDescription && <p>{effortDescription}</p>}
+        {unavailableEffort && <p className="oa-delegate-invalid">{t('unavailableReasoningHint')}</p>}
+        {reasoningReset[target] && selected && selectedEffort === undefined && <p role="status">{t('reasoningReset')}</p>}
       </div>
     </div>
   }

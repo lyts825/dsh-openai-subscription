@@ -35,13 +35,41 @@ function routeText(value: unknown): value is string {
     && value === value.trim() && !/[\u0000-\u001f\u007f]/u.test(value)
 }
 
+function effortText(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 64 && !/[\s\p{Cc}]/u.test(value)
+}
+
 function parseRoute(value: unknown): DelegationRoute | null {
   if (value === null) return null
   const route = object(value)
-  if (!route || !exactKeys(route, ['provider', 'model']) || !routeText(route.provider) || !routeText(route.model)) {
+  if (!route || (!exactKeys(route, ['provider', 'model']) && !exactKeys(route, ['provider', 'model', 'reasoningEffort']))
+    || !routeText(route.provider) || !routeText(route.model)) {
     throw new DelegationSettingsError('委派模型必须是有效的 provider/model 路由。', 'invalid')
   }
-  return { provider: route.provider, model: route.model }
+  if (Object.hasOwn(route, 'reasoningEffort') && !effortText(route.reasoningEffort)) {
+    throw new DelegationSettingsError('委派推理档位必须是有效的非空标识，不能包含空白或控制字符，且不超过 64 个字符。', 'invalid')
+  }
+  return { provider: route.provider, model: route.model,
+    ...(typeof route.reasoningEffort === 'string' ? { reasoningEffort: route.reasoningEffort } : {}) }
+}
+
+/** Copy bounded exact-model metadata, without inferring provider-wide capabilities. */
+function reasoningView(value: unknown): DelegationCandidate['reasoning'] {
+  const reasoning = object(value)
+  if (!reasoning || !Array.isArray(reasoning.efforts) || reasoning.efforts.length > 64) return undefined
+  const efforts: NonNullable<DelegationCandidate['reasoning']>['efforts'] = []
+  const seen = new Set<string>()
+  for (const value of reasoning.efforts) {
+    const option = object(value)
+    if (!option || !effortText(option.id) || seen.has(option.id) || typeof option.name !== 'string'
+      || !option.name.trim() || option.name.length > 512 || /[\p{Cc}]/u.test(option.name)) continue
+    const description = typeof option.description === 'string' && option.description.length <= 2000
+      && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(option.description) ? option.description : undefined
+    efforts.push({ id: option.id, name: option.name, ...(description === undefined ? {} : { description }) })
+    seen.add(option.id)
+  }
+  return { efforts,
+    ...(effortText(reasoning.defaultEffort) && seen.has(reasoning.defaultEffort) ? { defaultEffort: reasoning.defaultEffort } : {}) }
 }
 
 /** Validate persisted preferences and immutable Session policy snapshots without accepting credentials. */
@@ -144,12 +172,23 @@ export class DelegationSettings {
     catch { return { candidates: [], catalogFailures: [], error: CATALOG_ERROR } }
     const results = await Promise.allSettled(providers.map(async provider => {
       const models = await llm.listModels(provider.id)
-      return models.flatMap(model => {
+      const candidates: DelegationCandidate[] = models.flatMap(model => {
         const target = familyOf(provider.id, model.id)
         return target && routeText(provider.id) && routeText(model.id)
           ? [{ provider: provider.id, providerName: provider.name, model: model.id, modelName: model.name, target }]
           : []
       })
+      // listModels deliberately projects only basic labels. Resolve through the
+      // LLM service so exact-route metadata receives the same validation as DSH's picker.
+      const metadata = await Promise.allSettled(candidates.map(async candidate => {
+        signal?.throwIfAborted()
+        return reasoningView((await llm.resolveModelInfo(provider.id, candidate.model, signal)).reasoning)
+      }))
+      signal?.throwIfAborted()
+      return { candidates: candidates.map((candidate, index) => {
+        const result = metadata[index]!
+        return result.status === 'fulfilled' && result.value !== undefined ? { ...candidate, reasoning: result.value } : candidate
+      }), partial: metadata.some(result => result.status === 'rejected') }
     }))
     signal?.throwIfAborted()
     const candidates: DelegationCandidate[] = []
@@ -160,7 +199,8 @@ export class DelegationSettings {
         catalogFailures.push({ provider: providers[index].id, message: '此提供方的模型目录暂时不可用。' })
         return
       }
-      for (const candidate of result.value) {
+      if (result.value.partial) catalogFailures.push({ provider: providers[index].id, message: '部分模型的推理档位暂时无法读取；其他模型仍可使用，请刷新目录后重试。' })
+      for (const candidate of result.value.candidates) {
         const key = JSON.stringify([candidate.provider, candidate.model])
         if (!seen.has(key)) { seen.add(key); candidates.push(candidate) }
       }
@@ -196,12 +236,21 @@ export class DelegationSettings {
         const required: DelegationTarget[] = policy.mode === 'auto' ? ['ds', 'gpt'] : [policy.manualTarget]
         for (const target of required) {
           const route = policy[target]
-          if (route && catalog.catalogFailures.some(failure => failure.provider === route.provider)) {
-            throw new DelegationSettingsError('所选提供方的模型目录暂时不可用，请稍后重试。', 'unavailable')
-          }
-          if (!route || !catalog.candidates.some(candidate => candidate.target === target
-            && candidate.provider === route.provider && candidate.model === route.model)) {
+          const candidate = route ? catalog.candidates.find(candidate => candidate.target === target
+            && candidate.provider === route.provider && candidate.model === route.model) : undefined
+          if (!route || !candidate) {
+            if (route && catalog.catalogFailures.some(failure => failure.provider === route.provider)) {
+              throw new DelegationSettingsError('所选提供方的模型目录暂时不可用，请稍后重试。', 'unavailable')
+            }
             throw new DelegationSettingsError(`${target === 'ds' ? 'DeepSeek' : 'GPT'} 模型不在当前目录中，请重新选择。`, 'invalid')
+          }
+          if (route.reasoningEffort !== undefined) {
+            if (!candidate.reasoning?.efforts.length) {
+              throw new DelegationSettingsError('所选模型未提供可验证的推理档位，请选择“跟随 DSH 默认”或更新模型目录。', 'invalid')
+            }
+            if (!candidate.reasoning.efforts.some(effort => effort.id === route.reasoningEffort)) {
+              throw new DelegationSettingsError('所选模型不支持该推理档位，请重新选择或改为“跟随 DSH 默认”。', 'invalid')
+            }
           }
         }
       }
